@@ -5,6 +5,8 @@ import Dashboard from "./pages/Dashboard";
 import ResumeUpload from "./pages/ResumeUpload";
 import RoleRecommendation from "./pages/RoleRecommendation";
 import InterviewRoom from "./pages/InterviewRoom";
+import FeedbackReport from "./pages/FeedbackReport";
+import JobRecommendation from "./pages/JobRecommendation";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -18,6 +20,9 @@ export default function App() {
         <Route path="/roles/:candidateId" element={<RoleRecommendation />} />
         <Route path="/roles" element={<RoleRecommendation />} />
         <Route path="/interview/:sessionId" element={<InterviewRoom />} />
+        <Route path="/report/:sessionId" element={<FeedbackReport />} />
+        <Route path="/jobs/:candidateId" element={<JobRecommendation />} />
+        <Route path="/jobs" element={<JobRecommendation />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>

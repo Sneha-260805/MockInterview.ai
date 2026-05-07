@@ -1,11 +1,35 @@
+# ── Core framework ────────────────────────────────────────────────────
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
 pydantic-settings==2.5.2
-motor==3.6.0
-pymongo==4.9.1
 python-dotenv==1.0.1
-python-multipart==0.0.12
+python-multipart==0.0.12  # required for file uploads (audio/video/resume)
 httpx==0.27.2
-pymupdf==1.24.11
-anthropic==0.34.2  # optional — only needed when USE_LLM=true
+
+# ── Database ──────────────────────────────────────────────────────────
+motor==3.6.0               # async MongoDB driver
+pymongo==4.9.1             # sync dependency of motor
+
+# ── Resume parsing ────────────────────────────────────────────────────
+pymupdf==1.24.11           # PDF text extraction (imported as fitz)
+
+# ── LLM (optional) ───────────────────────────────────────────────────
+anthropic==0.34.2          # only used when USE_LLM=true; safe to leave installed
+
+# ── Audio transcription (optional) ───────────────────────────────────
+# Uncomment ONE of the following to enable real Whisper transcription.
+# Without either, audio scoring uses a reproducible file-size heuristic.
+#
+# faster-whisper            # recommended: CTranslate2-based, faster + lower memory
+# openai-whisper            # alternative: original OpenAI implementation
+
+# ── Video analysis (optional) ─────────────────────────────────────────
+# Uncomment to enable real face detection via OpenCV + MediaPipe.
+# Without these, video scoring uses a reproducible file-size heuristic.
+#
+# opencv-python-headless    # use headless variant in Docker / server environments
+# mediapipe                 # Google MediaPipe face detection (requires opencv)
+#
+# For local development with a display you can use:
+# opencv-python             # includes GUI support (imshow etc.)

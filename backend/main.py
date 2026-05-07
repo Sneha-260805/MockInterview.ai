@@ -8,6 +8,8 @@ from routes.health import router as health_router
 from routes.resume_routes import router as resume_router
 from routes.role_routes import router as role_router
 from routes.interview_routes import router as interview_router
+from routes.job_routes import router as job_router
+from routes.scoring_routes import router as scoring_router
 
 settings = get_settings()
 
@@ -37,6 +39,8 @@ app.include_router(health_router)
 app.include_router(resume_router)
 app.include_router(role_router)
 app.include_router(interview_router)
+app.include_router(job_router)
+app.include_router(scoring_router)
 
 
 @app.get("/")

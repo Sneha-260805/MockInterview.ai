@@ -1,0 +1,85 @@
+Alex Morgan
+Software Engineer
+alex.morgan@email.com | github.com/alexmorgan | linkedin.com/in/alexmorgan | San Francisco, CA
+
+SUMMARY
+Versatile software engineer with 4 years of experience building scalable backend systems,
+RESTful APIs, and data-driven applications. Passionate about clean architecture, developer
+tooling, and applying machine learning to real-world problems. Comfortable across the full
+stack; strongest in Python and JavaScript ecosystems.
+
+SKILLS
+Languages    : Python, JavaScript (ES2022), TypeScript, SQL, Bash
+Frameworks   : FastAPI, Flask, Django, React, Node.js, Express
+Databases    : PostgreSQL, MongoDB, Redis, SQLite
+Cloud / Infra: AWS (EC2, S3, Lambda, RDS), Docker, Docker Compose, GitHub Actions, Nginx
+ML / Data    : scikit-learn, pandas, NumPy, Matplotlib, Hugging Face Transformers
+Tools        : Git, Postman, VS Code, Jira, Confluence, Linux
+
+EXPERIENCE
+
+Senior Software Engineer — DataStream Inc, San Francisco, CA        Jan 2023 – Present
+• Redesigned the ingestion pipeline (Python + FastAPI) to handle 2 M events/day,
+  reducing p99 latency by 40 % with async batch processing and Redis queueing.
+• Built a real-time anomaly detection microservice using scikit-learn isolation forests;
+  integrated with PagerDuty to auto-alert on-call engineers.
+• Led migration from monolithic Django app to service-oriented architecture across 3 teams;
+  authored ADRs and ran architecture review sessions.
+• Mentored 2 junior engineers; introduced code-review standards and pre-commit hooks.
+
+Software Engineer — FinanceFlow, Remote                             Mar 2021 – Dec 2022
+• Developed REST APIs in Flask for a portfolio management platform serving 15 k users;
+  implemented JWT auth, role-based access control, and audit logging.
+• Integrated third-party data providers (Plaid, Alpha Vantage) with robust retry logic
+  and circuit breakers using the Tenacity library.
+• Wrote a batch ETL pipeline (pandas + SQLAlchemy) to reconcile daily transaction data
+  across 4 legacy databases; reduced reconciliation time from 6 h to 25 min.
+• Containerised all services with Docker; set up CI/CD pipelines with GitHub Actions.
+
+Junior Developer — WebCraft Agency, San Jose, CA                    Aug 2020 – Feb 2021
+• Built and maintained React frontends for 5 client projects using React Router and Redux.
+• Created reusable component libraries with Storybook; improved design-to-code handoff.
+• Optimised PostgreSQL queries (added indexes, rewrote N+1 patterns); cut average
+  API response time by 55 %.
+
+PROJECTS
+
+InterviewCoach AI (Personal Project)                                2024
+• End-to-end AI interview preparation platform (this project!).
+• FastAPI backend with adaptive question selection; React + Tailwind frontend.
+• Integrated Anthropic Claude for resume analysis and answer evaluation.
+• Audio scoring via faster-whisper; video scoring via OpenCV + MediaPipe.
+• Deployed with Docker Compose; MongoDB + in-memory fallback.
+
+Open-Source: PyFlow (github.com/alexmorgan/pyflow)                 2023
+• Lightweight Python task-graph library (DAG execution engine).
+• 340 GitHub stars; used by 12 teams internally at DataStream.
+• Full test suite (pytest), CI via GitHub Actions, semantic release automation.
+
+ML Classifier Dashboard                                            2022
+• Built a React dashboard for visualising multi-class classification results.
+• Connected to a Flask API serving predictions from a fine-tuned BERT model.
+• Deployed on AWS EC2 with S3 for model artefact storage.
+
+EDUCATION
+
+B.S. Computer Science — University of California, Davis             2016 – 2020
+GPA: 3.7 | Relevant coursework: Data Structures, Algorithms, Databases,
+Machine Learning, Operating Systems, Computer Networks
+
+CERTIFICATIONS
+• AWS Certified Developer – Associate (2023)
+• MongoDB Associate Developer (2022)
+
+STRENGTHS
+- API design (REST, OpenAPI / Swagger documentation)
+- Distributed systems and async patterns (asyncio, message queues)
+- Data pipeline engineering (ETL, streaming ingestion)
+- Machine learning integration (model serving, feature engineering)
+- Technical mentorship and code review
+
+AREAS FOR GROWTH
+- Kubernetes / container orchestration at scale
+- Advanced ML (deep learning, LLM fine-tuning)
+- Mobile development (React Native)
+- System design for >10 M RPS workloads

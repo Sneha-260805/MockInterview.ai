@@ -30,3 +30,17 @@ def save_session(session_id: str, data: dict) -> None:
 
 def get_session(session_id: str) -> dict | None:
     return _sessions.get(session_id)
+
+
+def append_audio_score(session_id: str, audio_entry: dict) -> None:
+    """Append an audio-analysis result to the session's audio_scores list."""
+    session = _sessions.get(session_id)
+    if session is not None:
+        session.setdefault("audio_scores", []).append(audio_entry)
+
+
+def append_video_score(session_id: str, video_entry: dict) -> None:
+    """Append a video-analysis result to the session's video_scores list."""
+    session = _sessions.get(session_id)
+    if session is not None:
+        session.setdefault("video_scores", []).append(video_entry)

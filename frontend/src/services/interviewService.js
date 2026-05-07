@@ -23,3 +23,64 @@ export async function evaluateAnswer({ sessionId, questionId, question, answer, 
   });
   return response.data; // EvaluationResult
 }
+
+export async function generateFinalReport(sessionId) {
+  const response = await api.post("/api/interview/final-report", {
+    session_id: sessionId,
+  });
+  return response.data; // FinalReport
+}
+
+export async function nextQuestion({ sessionId, lastAnswerScore, confidenceScore, currentTopic }) {
+  const response = await api.post("/api/interview/next-question", {
+    session_id: sessionId,
+    last_answer_score: lastAnswerScore,
+    confidence_score: confidenceScore,
+    current_topic: currentTopic,
+  });
+  return response.data; // NextQuestionResponse
+}
+
+/**
+ * Upload an audio recording for transcription and behavioral scoring.
+ * Optionally associates the result with a session + question number so
+ * the final report can use real audio-derived scores.
+ *
+ * @param {Blob}   audioBlob      - audio Blob from MediaRecorder
+ * @param {string} [sessionId]    - interview session ID
+ * @param {number} [questionNumber] - 1-based question index
+ * @returns {Promise<AudioAnalysisResponse>}
+ */
+/**
+ * Upload a video clip or single frame for visual scoring.
+ * Accepts any Blob; filename extension determines image vs video on backend.
+ *
+ * @param {Blob}   videoBlob      - webm clip or JPEG snapshot from MediaRecorder / canvas
+ * @param {string} [filename]     - "frame.jpg" or "recording.webm" (sets Content-Type hint)
+ * @param {string} [sessionId]
+ * @param {number} [questionNumber]
+ * @returns {Promise<VideoAnalysisResponse>}
+ */
+export async function analyzeVideo({ videoBlob, filename = "capture.webm", sessionId, questionNumber }) {
+  const form = new FormData();
+  form.append("video", videoBlob, filename);
+  if (sessionId)              form.append("session_id",      sessionId);
+  if (questionNumber != null) form.append("question_number", String(questionNumber));
+
+  const response = await api.post("/api/scoring/video", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data; // VideoAnalysisResponse
+}
+
+export async function analyzeAudio({ audioBlob, sessionId, questionNumber }) {
+  const form = new FormData();
+  form.append("audio", audioBlob, "answer.webm");
+  if (sessionId)      form.append("session_id",      sessionId);
+  if (questionNumber != null) form.append("question_number", String(questionNumber));
+
+  const response = await api.post("/api/scoring/audio", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data; // AudioAnalysisResponse
+}

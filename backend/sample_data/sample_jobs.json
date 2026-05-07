@@ -1,0 +1,452 @@
+[
+  {
+    "job_id": "JOB001",
+    "title": "Frontend Developer Intern",
+    "company": "TechNova",
+    "required_skills": ["React", "JavaScript", "CSS", "HTML"],
+    "experience": "0-1 years",
+    "location": "Hyderabad",
+    "description": "Build responsive, pixel-perfect frontend components for our SaaS platform. You will work closely with product designers and backend engineers to ship features end-to-end."
+  },
+  {
+    "job_id": "JOB002",
+    "title": "Junior Frontend Developer",
+    "company": "PixelPeak",
+    "required_skills": ["React", "TypeScript", "CSS", "REST APIs", "Git"],
+    "experience": "0-2 years",
+    "location": "Bangalore",
+    "description": "Develop and maintain a high-traffic consumer web application. Strong eye for UI quality and performance optimisation is essential."
+  },
+  {
+    "job_id": "JOB003",
+    "title": "Frontend Engineer",
+    "company": "VelocityTech",
+    "required_skills": ["React", "Redux", "TypeScript", "Tailwind CSS", "GraphQL"],
+    "experience": "1-3 years",
+    "location": "Pune",
+    "description": "Own entire frontend feature areas from design handoff to deployment. We care deeply about web performance and accessibility."
+  },
+  {
+    "job_id": "JOB004",
+    "title": "Senior Frontend Developer",
+    "company": "CloudMatrix",
+    "required_skills": ["React", "Next.js", "TypeScript", "GraphQL", "Testing", "CI/CD"],
+    "experience": "3-5 years",
+    "location": "Remote",
+    "description": "Lead frontend architecture decisions, mentor junior developers, and drive adoption of best practices across a growing engineering team."
+  },
+  {
+    "job_id": "JOB005",
+    "title": "React Native Developer",
+    "company": "MobiCore",
+    "required_skills": ["React Native", "JavaScript", "REST APIs", "Redux", "iOS", "Android"],
+    "experience": "1-3 years",
+    "location": "Mumbai",
+    "description": "Build cross-platform mobile applications for iOS and Android with a focus on performance and smooth UX."
+  },
+  {
+    "job_id": "JOB006",
+    "title": "UI Engineer",
+    "company": "DesignForge",
+    "required_skills": ["React", "CSS", "Figma", "JavaScript", "HTML", "Storybook"],
+    "experience": "0-2 years",
+    "location": "Chennai",
+    "description": "Collaborate with the design team to translate Figma mockups into reusable, accessible React components for our design system."
+  },
+  {
+    "job_id": "JOB007",
+    "title": "Vue.js Developer",
+    "company": "WebCraft Labs",
+    "required_skills": ["Vue", "JavaScript", "CSS", "REST APIs", "HTML"],
+    "experience": "1-2 years",
+    "location": "Delhi",
+    "description": "Build and maintain Vue.js applications for enterprise clients. Opportunity to work on greenfield projects from day one."
+  },
+  {
+    "job_id": "JOB008",
+    "title": "Angular Developer",
+    "company": "EnterpriseSync",
+    "required_skills": ["Angular", "TypeScript", "RxJS", "REST APIs", "HTML"],
+    "experience": "2-4 years",
+    "location": "Hyderabad",
+    "description": "Work on a large-scale enterprise application used by Fortune 500 companies. Focus on performance, accessibility, and internationalisation."
+  },
+  {
+    "job_id": "JOB009",
+    "title": "Backend Developer Intern",
+    "company": "ByteForge",
+    "required_skills": ["Python", "REST APIs", "SQL", "Git"],
+    "experience": "0-1 years",
+    "location": "Bangalore",
+    "description": "Develop and test REST APIs for our B2B analytics platform. Learn production engineering practices in a supportive environment."
+  },
+  {
+    "job_id": "JOB010",
+    "title": "Python Backend Developer",
+    "company": "DataSphere",
+    "required_skills": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker"],
+    "experience": "1-3 years",
+    "location": "Bangalore",
+    "description": "Build high-performance microservices powering our real-time analytics engine. FastAPI and async programming are central to this role."
+  },
+  {
+    "job_id": "JOB011",
+    "title": "Node.js Backend Engineer",
+    "company": "StreamLine",
+    "required_skills": ["Node.js", "Express", "MongoDB", "REST APIs", "Redis"],
+    "experience": "1-3 years",
+    "location": "Pune",
+    "description": "Design and implement scalable REST APIs and background job queues for our event-streaming platform."
+  },
+  {
+    "job_id": "JOB012",
+    "title": "Django Developer",
+    "company": "StackLabs",
+    "required_skills": ["Python", "Django", "PostgreSQL", "REST APIs", "Celery"],
+    "experience": "2-4 years",
+    "location": "Remote",
+    "description": "Extend and maintain a Django-based ERP system serving thousands of daily active users. PostgreSQL query optimisation is a key part of this role."
+  },
+  {
+    "job_id": "JOB013",
+    "title": "Senior Backend Engineer",
+    "company": "ScaleUp",
+    "required_skills": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "Kubernetes", "AWS"],
+    "experience": "4-6 years",
+    "location": "Bangalore",
+    "description": "Lead the design of distributed backend systems handling 10M+ daily requests. Own performance, reliability, and security of core services."
+  },
+  {
+    "job_id": "JOB014",
+    "title": "Go Backend Developer",
+    "company": "NextWave",
+    "required_skills": ["Go", "REST APIs", "PostgreSQL", "Docker", "gRPC"],
+    "experience": "2-4 years",
+    "location": "Hyderabad",
+    "description": "Build ultra-low-latency microservices in Go for our fintech platform. Experience with gRPC and event-driven architecture is a plus."
+  },
+  {
+    "job_id": "JOB015",
+    "title": "Java Spring Boot Developer",
+    "company": "FinBridge",
+    "required_skills": ["Java", "Spring Boot", "PostgreSQL", "REST APIs", "Microservices"],
+    "experience": "2-4 years",
+    "location": "Mumbai",
+    "description": "Develop and maintain microservices for our core banking platform. You will work in an Agile team with a strong focus on code quality."
+  },
+  {
+    "job_id": "JOB016",
+    "title": "Full Stack Developer Intern",
+    "company": "RapidStack",
+    "required_skills": ["React", "Node.js", "MongoDB", "REST APIs", "JavaScript"],
+    "experience": "0-1 years",
+    "location": "Delhi",
+    "description": "Contribute to both frontend and backend of our SaaS product. Great opportunity to learn full-stack development in a fast-moving startup."
+  },
+  {
+    "job_id": "JOB017",
+    "title": "Full Stack Engineer",
+    "company": "CloudNine",
+    "required_skills": ["React", "Node.js", "PostgreSQL", "REST APIs", "TypeScript", "Docker"],
+    "experience": "1-3 years",
+    "location": "Bangalore",
+    "description": "Build product features end-to-end. Our stack is React + Node.js + Postgres; we value developers who can own a feature from API design to UI."
+  },
+  {
+    "job_id": "JOB018",
+    "title": "Full Stack Developer (Python/React)",
+    "company": "DevDock",
+    "required_skills": ["React", "Python", "FastAPI", "PostgreSQL", "TypeScript"],
+    "experience": "2-4 years",
+    "location": "Pune",
+    "description": "Own frontend and backend for new product modules. You will work directly with the founding team on product architecture decisions."
+  },
+  {
+    "job_id": "JOB019",
+    "title": "MERN Stack Developer",
+    "company": "CodeCraft",
+    "required_skills": ["MongoDB", "Express", "React", "Node.js", "JavaScript", "REST APIs"],
+    "experience": "1-3 years",
+    "location": "Hyderabad",
+    "description": "Build and scale our social commerce platform using the MERN stack. You will deliver features independently and collaborate with mobile teams."
+  },
+  {
+    "job_id": "JOB020",
+    "title": "Senior Full Stack Engineer",
+    "company": "GrowthEngine",
+    "required_skills": ["React", "Node.js", "PostgreSQL", "Redis", "AWS", "Docker", "TypeScript"],
+    "experience": "4-6 years",
+    "location": "Remote",
+    "description": "Design systems that serve millions of users. Lead technical strategy, review architecture proposals, and mentor a growing team of engineers."
+  },
+  {
+    "job_id": "JOB021",
+    "title": "Data Science Intern",
+    "company": "DataPulse",
+    "required_skills": ["Python", "pandas", "NumPy", "scikit-learn", "SQL"],
+    "experience": "0-1 years",
+    "location": "Bangalore",
+    "description": "Work with real-world datasets to build predictive models. You will explore data, run experiments, and present findings to the product team."
+  },
+  {
+    "job_id": "JOB022",
+    "title": "Junior Data Scientist",
+    "company": "IntelliMetrics",
+    "required_skills": ["Python", "pandas", "scikit-learn", "SQL", "Matplotlib"],
+    "experience": "0-2 years",
+    "location": "Hyderabad",
+    "description": "Build classification and regression models for our customer analytics product. Strong Python and statistics background required."
+  },
+  {
+    "job_id": "JOB023",
+    "title": "Data Scientist",
+    "company": "QuantAnalytics",
+    "required_skills": ["Python", "scikit-learn", "TensorFlow", "SQL", "pandas", "Statistics"],
+    "experience": "2-4 years",
+    "location": "Bangalore",
+    "description": "Develop and productionise ML models for demand forecasting. You will own the full ML lifecycle from experimentation to deployment."
+  },
+  {
+    "job_id": "JOB024",
+    "title": "NLP Data Scientist",
+    "company": "LangCore",
+    "required_skills": ["Python", "NLP", "TensorFlow", "pandas", "scikit-learn", "BERT"],
+    "experience": "2-4 years",
+    "location": "Remote",
+    "description": "Build NLP pipelines for entity extraction, sentiment analysis, and text classification at scale. Experience with transformer models is essential."
+  },
+  {
+    "job_id": "JOB025",
+    "title": "Senior Data Scientist",
+    "company": "InsightEngine",
+    "required_skills": ["Python", "scikit-learn", "PyTorch", "SQL", "Spark", "MLflow"],
+    "experience": "4-6 years",
+    "location": "Mumbai",
+    "description": "Lead a squad of data scientists building recommendation and personalisation models. Own the roadmap for ML initiatives across the company."
+  },
+  {
+    "job_id": "JOB026",
+    "title": "ML Engineer Intern",
+    "company": "NeuralNest",
+    "required_skills": ["Python", "TensorFlow", "pandas", "scikit-learn", "Git"],
+    "experience": "0-1 years",
+    "location": "Bangalore",
+    "description": "Assist senior ML engineers in building and evaluating models for computer vision tasks. Great learning environment with mentorship from PhD researchers."
+  },
+  {
+    "job_id": "JOB027",
+    "title": "Machine Learning Engineer",
+    "company": "AILogic",
+    "required_skills": ["Python", "PyTorch", "scikit-learn", "Docker", "REST APIs", "MLflow"],
+    "experience": "1-3 years",
+    "location": "Hyderabad",
+    "description": "Build training pipelines and serving infrastructure for production ML models. You will work on both research prototypes and production deployments."
+  },
+  {
+    "job_id": "JOB028",
+    "title": "Computer Vision Engineer",
+    "company": "VisionAI",
+    "required_skills": ["Python", "PyTorch", "OpenCV", "TensorFlow", "Docker"],
+    "experience": "2-4 years",
+    "location": "Bangalore",
+    "description": "Develop computer vision models for industrial quality inspection. Experience with object detection (YOLO, Faster-RCNN) is highly desired."
+  },
+  {
+    "job_id": "JOB029",
+    "title": "LLM / GenAI Engineer",
+    "company": "QuantumByte",
+    "required_skills": ["Python", "PyTorch", "LLM", "REST APIs", "Docker", "FastAPI"],
+    "experience": "2-4 years",
+    "location": "Remote",
+    "description": "Build and optimise LLM-based applications including RAG pipelines, fine-tuned models, and inference APIs. Experience with Hugging Face and LangChain is a strong plus."
+  },
+  {
+    "job_id": "JOB030",
+    "title": "Senior ML Engineer",
+    "company": "DeepBuild",
+    "required_skills": ["Python", "PyTorch", "TensorFlow", "Kubernetes", "Docker", "MLflow", "Spark"],
+    "experience": "4-6 years",
+    "location": "Bangalore",
+    "description": "Lead the design of ML infrastructure to serve models at scale. Own model monitoring, retraining pipelines, and experiment tracking frameworks."
+  },
+  {
+    "job_id": "JOB031",
+    "title": "DevOps Engineer",
+    "company": "InfraGrow",
+    "required_skills": ["Docker", "Kubernetes", "CI/CD", "Linux", "Bash", "Git"],
+    "experience": "1-3 years",
+    "location": "Hyderabad",
+    "description": "Build and maintain CI/CD pipelines, container orchestration, and cloud infrastructure. Collaborate closely with product engineers to improve deployment velocity."
+  },
+  {
+    "job_id": "JOB032",
+    "title": "Cloud Infrastructure Engineer",
+    "company": "CloudPilot",
+    "required_skills": ["AWS", "Terraform", "Docker", "Kubernetes", "CI/CD", "Linux"],
+    "experience": "2-4 years",
+    "location": "Bangalore",
+    "description": "Design, provision, and maintain AWS infrastructure using Infrastructure as Code. Focus on reliability, security, and cost optimisation."
+  },
+  {
+    "job_id": "JOB033",
+    "title": "Site Reliability Engineer",
+    "company": "ReliableOps",
+    "required_skills": ["Kubernetes", "AWS", "Prometheus", "Docker", "Python", "Linux"],
+    "experience": "2-4 years",
+    "location": "Remote",
+    "description": "Own the reliability, scalability, and performance of production systems. Participate in an on-call rotation and drive root-cause analysis of incidents."
+  },
+  {
+    "job_id": "JOB034",
+    "title": "Senior DevOps / Platform Engineer",
+    "company": "PlatformHub",
+    "required_skills": ["AWS", "GCP", "Kubernetes", "Terraform", "Docker", "Prometheus", "CI/CD"],
+    "experience": "4-6 years",
+    "location": "Bangalore",
+    "description": "Architect and evolve a multi-cloud developer platform. Enable product teams to ship faster and more reliably through self-service infrastructure tooling."
+  },
+  {
+    "job_id": "JOB035",
+    "title": "iOS Developer",
+    "company": "AppSprint",
+    "required_skills": ["Swift", "iOS", "Xcode", "REST APIs", "Core Data"],
+    "experience": "1-3 years",
+    "location": "Mumbai",
+    "description": "Build native iOS applications from the ground up. You will own features end-to-end — from Swift code to App Store release."
+  },
+  {
+    "job_id": "JOB036",
+    "title": "Android Developer",
+    "company": "NativeEdge",
+    "required_skills": ["Kotlin", "Android", "REST APIs", "Jetpack Compose", "MVVM"],
+    "experience": "1-3 years",
+    "location": "Hyderabad",
+    "description": "Develop and maintain Android applications with a focus on modern architecture patterns and Jetpack libraries."
+  },
+  {
+    "job_id": "JOB037",
+    "title": "Senior React Native Developer",
+    "company": "CrossPlatform Co",
+    "required_skills": ["React Native", "JavaScript", "TypeScript", "Redux", "REST APIs", "iOS", "Android"],
+    "experience": "3-5 years",
+    "location": "Remote",
+    "description": "Lead development of a React Native app used by 500k+ users. Drive architectural decisions and performance optimisation initiatives."
+  },
+  {
+    "job_id": "JOB038",
+    "title": "Flutter Developer",
+    "company": "FlexDev",
+    "required_skills": ["Flutter", "Dart", "REST APIs", "Firebase", "iOS", "Android"],
+    "experience": "1-3 years",
+    "location": "Chennai",
+    "description": "Build beautiful, performant Flutter applications for our edtech product used across India."
+  },
+  {
+    "job_id": "JOB039",
+    "title": "Data Engineer Intern",
+    "company": "PipeWorks",
+    "required_skills": ["Python", "SQL", "pandas", "Git", "Linux"],
+    "experience": "0-1 years",
+    "location": "Hyderabad",
+    "description": "Assist in building ETL pipelines and maintaining data quality checks for our analytics data warehouse."
+  },
+  {
+    "job_id": "JOB040",
+    "title": "Data Engineer",
+    "company": "FlowData",
+    "required_skills": ["Python", "SQL", "Spark", "Airflow", "PostgreSQL", "dbt"],
+    "experience": "1-3 years",
+    "location": "Bangalore",
+    "description": "Design and build scalable ELT pipelines using Spark and Airflow. Own data quality and freshness SLAs for downstream analytics teams."
+  },
+  {
+    "job_id": "JOB041",
+    "title": "Kafka / Streaming Engineer",
+    "company": "StreamCore",
+    "required_skills": ["Kafka", "Python", "Spark", "SQL", "Docker", "Kubernetes"],
+    "experience": "2-4 years",
+    "location": "Pune",
+    "description": "Build real-time streaming pipelines processing hundreds of thousands of events per second using Kafka and Flink."
+  },
+  {
+    "job_id": "JOB042",
+    "title": "Analytics Engineer",
+    "company": "MetricsMind",
+    "required_skills": ["SQL", "dbt", "Python", "Snowflake", "Airflow"],
+    "experience": "1-3 years",
+    "location": "Remote",
+    "description": "Model and transform data in our Snowflake warehouse using dbt. Partner with data scientists and business teams to create reliable analytics datasets."
+  },
+  {
+    "job_id": "JOB043",
+    "title": "Senior Data Engineer",
+    "company": "DataVault",
+    "required_skills": ["Python", "Spark", "Kafka", "Airflow", "AWS", "SQL", "dbt"],
+    "experience": "4-6 years",
+    "location": "Bangalore",
+    "description": "Architect a modern data platform on AWS. Own the streaming and batch ingestion layers and collaborate with ML engineers on feature pipelines."
+  },
+  {
+    "job_id": "JOB044",
+    "title": "Software Engineer (Generalist)",
+    "company": "TalentAI",
+    "required_skills": ["Python", "REST APIs", "SQL", "Git", "Docker"],
+    "experience": "1-3 years",
+    "location": "Hyderabad",
+    "description": "Join a small team building AI-powered HR tools. Work across the stack — APIs, data models, and some frontend glue — to ship product quickly."
+  },
+  {
+    "job_id": "JOB045",
+    "title": "Backend Engineer (FastAPI / PostgreSQL)",
+    "company": "Microverse",
+    "required_skills": ["Python", "FastAPI", "PostgreSQL", "Docker", "REST APIs", "Redis"],
+    "experience": "2-4 years",
+    "location": "Bangalore",
+    "description": "Build a new generation of microservices for our logistics platform. Own service design, testing, and deployment pipeline."
+  },
+  {
+    "job_id": "JOB046",
+    "title": "Full Stack Intern (React + Django)",
+    "company": "EduStack",
+    "required_skills": ["React", "Python", "Django", "SQL", "JavaScript"],
+    "experience": "0-1 years",
+    "location": "Delhi",
+    "description": "Build features for our online learning platform. You will work on both the React frontend and Django REST backend with guidance from senior engineers."
+  },
+  {
+    "job_id": "JOB047",
+    "title": "MLOps Engineer",
+    "company": "ModelOps",
+    "required_skills": ["Python", "Docker", "Kubernetes", "MLflow", "AWS", "CI/CD", "Airflow"],
+    "experience": "2-4 years",
+    "location": "Remote",
+    "description": "Build the ML platform that enables data scientists to train, evaluate, and deploy models reliably. Own the model registry, experiment tracking, and serving infrastructure."
+  },
+  {
+    "job_id": "JOB048",
+    "title": "GraphQL API Developer",
+    "company": "Nexus Labs",
+    "required_skills": ["Node.js", "GraphQL", "PostgreSQL", "TypeScript", "REST APIs"],
+    "experience": "1-3 years",
+    "location": "Mumbai",
+    "description": "Design and build a federated GraphQL API consumed by multiple frontend teams. Strong focus on schema design and performance."
+  },
+  {
+    "job_id": "JOB049",
+    "title": "Cloud Security Engineer",
+    "company": "SecureNet",
+    "required_skills": ["AWS", "GCP", "Terraform", "Python", "Linux", "Security"],
+    "experience": "3-5 years",
+    "location": "Hyderabad",
+    "description": "Own the security posture of our cloud infrastructure. Perform threat modelling, implement security controls, and run vulnerability assessments."
+  },
+  {
+    "job_id": "JOB050",
+    "title": "Research Engineer (Deep Learning)",
+    "company": "BrainWave AI",
+    "required_skills": ["Python", "PyTorch", "TensorFlow", "Research", "NumPy", "CUDA"],
+    "experience": "2-4 years",
+    "location": "Bangalore",
+    "description": "Work at the intersection of research and engineering. Implement and benchmark state-of-the-art deep learning architectures for production use cases."
+  }
+]
