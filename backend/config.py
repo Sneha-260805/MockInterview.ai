@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     use_llm: bool = False
     anthropic_api_key: str = ""
 
+    # Adzuna live job API
+    adzuna_app_id: str = ""
+    adzuna_app_key: str = ""
+
     class Config:
         env_file = ".env"
 

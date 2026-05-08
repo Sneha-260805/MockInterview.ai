@@ -279,10 +279,14 @@ async def recommend(
     use_llm_blurb: bool = False,
 ) -> JobRecommendationResponse:
     """
-    Score every job in sample_jobs.json against the candidate's skills
-    and return the top matches.
+    Fetch live jobs from Adzuna first, fall back to sample_jobs.json
+    if API is unavailable.
     """
-    jobs = _load_jobs()
+    from agents.adzuna_job_fetcher import fetch_live_jobs
+    jobs = await fetch_live_jobs(candidate_skills, candidate_level)
+    if not jobs:
+        logger.info("No live jobs fetched, using sample_jobs.json as fallback.")
+        jobs = _load_jobs()
     if not jobs:
         return JobRecommendationResponse(
             candidate_id=candidate_id,
