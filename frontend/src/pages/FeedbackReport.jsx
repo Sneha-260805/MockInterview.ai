@@ -368,7 +368,8 @@ export default function FeedbackReport() {
             </svg>
             <p className="text-xs text-green-800 leading-relaxed">
               <span className="font-semibold">Computer-vision analysis active.</span>{" "}
-              Engagement, eye contact, posture, and stress derived from real face detection.
+              Engagement, Framing, Stability, and Motion derived from real face
+              detection on your video captures.
             </p>
           </div>
         )}
@@ -380,7 +381,8 @@ export default function FeedbackReport() {
             </svg>
             <p className="text-xs text-indigo-800 leading-relaxed">
               <span className="font-semibold">Full multimodal analysis.</span>{" "}
-              Audio and Video scores are derived from your recordings — all behavioral axes use real data.
+              Audio (Communication, Confidence) and Video (Engagement, Framing, Stability, Motion) scores
+              are derived from your recordings — all behavioral axes use real data.
             </p>
           </div>
         )}
@@ -686,22 +688,24 @@ export default function FeedbackReport() {
                         </p>
                         <div className="grid grid-cols-4 gap-2 text-center">
                           {[
-                            { label: "Engagement",  val: s.video_engagement,  isScore: true },
-                            { label: "Eye Contact", val: s.video_eye_contact, isScore: true },
-                            { label: "Posture",     val: s.video_posture,     isScore: true },
-                            { label: "Stress",      val: s.video_stress
-                                ? (s.video_stress === "low" ? "Calm" : s.video_stress === "medium" ? "Moderate" : "Elevated")
-                                : "—",
-                              isScore: false },
+                            { label: "Engagement", val: s.video_engagement, isScore: true },
+                            { label: "Framing",    val: s.video_framing,    isScore: true },
+                            { label: "Stability",  val: s.video_stability,  isScore: true },
+                            { label: "Motion",     val: s.video_movement
+                                ? (s.video_movement === "low" ? "Calm"
+                                  : s.video_movement === "medium" ? "Moderate"
+                                  : "Elevated")
+                                : "—",                                        isScore: false },
                           ].map(({ label, val, isScore }) => (
                             <div key={label}>
                               <p className={`text-sm font-bold tabular-nums
-                                ${isScore ? scoreColor(val)
+                                ${isScore
+                                  ? (val != null ? scoreColor(val) : "text-gray-300")
                                   : val === "Calm" ? "text-green-600"
                                   : val === "Moderate" ? "text-yellow-500"
                                   : val === "Elevated" ? "text-red-500"
-                                  : "text-gray-500"}`}>
-                                {val}
+                                  : "text-gray-400"}`}>
+                                {val != null ? val : "—"}
                               </p>
                               <p className="text-[10px] text-gray-400">{label}</p>
                             </div>

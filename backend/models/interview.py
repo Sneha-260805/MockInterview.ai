@@ -113,10 +113,10 @@ class AnswerSummary(BaseModel):
     audio_speaking_rate: Optional[str] = None
     audio_pause_count:   Optional[int] = None
     # Video intelligence fields (populated when /api/scoring/video was called)
-    video_engagement:    Optional[int] = None
-    video_eye_contact:   Optional[int] = None
-    video_posture:       Optional[int] = None
-    video_stress:        Optional[str] = None
+    video_engagement:    Optional[int] = None   # face presence rate
+    video_framing:       Optional[int] = None   # face centering in frame (renamed from video_eye_contact)
+    video_stability:     Optional[int] = None   # camera-distance consistency (renamed from video_posture)
+    video_movement:      Optional[str] = None   # low|medium|high head movement (renamed from video_stress)
 
 
 class LearningItem(BaseModel):

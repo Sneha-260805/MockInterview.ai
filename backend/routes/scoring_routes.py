@@ -108,7 +108,7 @@ async def analyze_video(
       • JPEG/PNG snapshots    → analysed as a single frame
       • Fallback mode         → heuristic scores (no OpenCV required)
 
-    Persists engagement, eye-contact, posture, and stress scores on the
+    Persists engagement, framing, stability, and movement scores on the
     session so the final report can use camera-derived engagement instead
     of the word-count heuristic.
     """
@@ -131,10 +131,11 @@ async def analyze_video(
     if session_id and session_id.strip():
         video_entry: dict = {
             "question_number":   question_number,
-            "engagement_score":  result["engagement_score"],
-            "eye_contact_score": result["eye_contact_score"],
-            "posture_score":     result["posture_score"],
-            "stress_indicator":  result["stress_indicator"],
+            "status":            result.get("status", "ok"),
+            "engagement_score":  result.get("engagement_score"),
+            "framing_score":     result.get("framing_score"),
+            "stability_score":   result.get("stability_score"),
+            "movement_activity": result.get("movement_activity"),
             "mode":              result["mode"],
         }
         store.append_video_score(session_id, video_entry)

@@ -740,27 +740,43 @@ export default function InterviewRoom() {
           {/* Video scores sidebar card */}
           {videoResult && (
             <SidebarCard title="Video Scores">
-              <ScoreLine label="Engagement"  score={videoResult.engagement_score} />
-              <ScoreLine label="Eye Contact" score={videoResult.eye_contact_score} />
-              <ScoreLine label="Posture"     score={videoResult.posture_score} />
-              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">Stress</span>
-                  <span className={`font-semibold capitalize
-                    ${videoResult.stress_indicator === "low"    ? "text-green-600"
-                      : videoResult.stress_indicator === "medium" ? "text-yellow-500"
-                      : "text-red-500"}`}>
-                    {videoResult.stress_indicator === "low" ? "Calm"
-                      : videoResult.stress_indicator === "medium" ? "Moderate"
-                      : "Elevated"}
-                  </span>
-                </div>
-                {videoResult.mode === "fallback" && (
-                  <p className="text-[10px] text-amber-600 pt-1">
-                    Heuristic mode — install opencv-python for real analysis
+              {videoResult.status === "invalid_analysis" ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                  <p className="text-xs font-semibold text-red-700 mb-1">Analysis unsuccessful</p>
+                  <p className="text-[10px] text-red-600 leading-relaxed">
+                    {videoResult.reason ?? "Insufficient face visibility for reliable analysis."}
                   </p>
-                )}
-              </div>
+                </div>
+              ) : (
+                <>
+                  {videoResult.engagement_score  != null && <ScoreLine label="Engagement" score={videoResult.engagement_score} />}
+                  {videoResult.framing_score     != null && <ScoreLine label="Framing"    score={videoResult.framing_score} />}
+                  {videoResult.stability_score   != null && <ScoreLine label="Stability"  score={videoResult.stability_score} />}
+                  <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+                    {videoResult.movement_activity && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">Motion</span>
+                        <span className={`font-semibold capitalize
+                          ${videoResult.movement_activity === "low"    ? "text-green-600"
+                            : videoResult.movement_activity === "medium" ? "text-yellow-500"
+                            : "text-red-500"}`}>
+                          {videoResult.movement_activity === "low" ? "Calm"
+                            : videoResult.movement_activity === "medium" ? "Moderate"
+                            : "Elevated"}
+                        </span>
+                      </div>
+                    )}
+                    {videoResult.warning && (
+                      <p className="text-[10px] text-amber-600">{videoResult.warning}</p>
+                    )}
+                    {videoResult.mode === "fallback" && (
+                      <p className="text-[10px] text-amber-600 pt-1">
+                        Heuristic mode — install opencv-python for real analysis
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
             </SidebarCard>
           )}
 

@@ -700,8 +700,12 @@ async def generate_report(
     comm = round(_mean([a["communication_clarity_score"] for a in audio_scores])) if audio_scores else comm_h
     conf = round(_mean([a["confidence_score"]            for a in audio_scores])) if audio_scores else conf_h
 
-    # Engagement — from video when available (camera presence beats word-count proxy)
-    eng  = round(_mean([v["engagement_score"]            for v in video_scores])) if video_scores else eng_h
+    # Engagement — from video when available; skip invalid_analysis entries
+    valid_video = [
+        v for v in video_scores
+        if v.get("status") != "invalid_analysis" and v.get("engagement_score") is not None
+    ]
+    eng = round(_mean([v["engagement_score"] for v in valid_video])) if valid_video else eng_h
 
     # ── Behavioral mode label ─────────────────────────────────────────────────
     audio_real = any(a.get("mode") in ("faster_whisper", "whisper")       for a in audio_scores)
@@ -792,10 +796,10 @@ async def generate_report(
             audio_speaking_rate=audio_entry.get("speaking_rate")               if audio_entry else None,
             audio_pause_count=  audio_entry.get("pause_count")                 if audio_entry else None,
             # Video intelligence
-            video_engagement=   video_entry.get("engagement_score")            if video_entry else None,
-            video_eye_contact=  video_entry.get("eye_contact_score")           if video_entry else None,
-            video_posture=      video_entry.get("posture_score")               if video_entry else None,
-            video_stress=       video_entry.get("stress_indicator")            if video_entry else None,
+            video_engagement=   video_entry.get("engagement_score")  if video_entry else None,
+            video_framing=      video_entry.get("framing_score")     if video_entry else None,
+            video_stability=    video_entry.get("stability_score")   if video_entry else None,
+            video_movement=     video_entry.get("movement_activity") if video_entry else None,
         ))
 
     candidate_name = (

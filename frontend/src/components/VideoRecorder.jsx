@@ -6,7 +6,7 @@
  *   2. Capture Frame → instant JPEG snapshot → backend analysis
  *   3. Record 15s    → short webm clip      → backend analysis
  *
- * Scores returned: engagement, eye_contact, posture, stress_indicator
+ * Scores returned: engagement_score, framing_score, stability_score, movement_activity
  *
  * Props
  *   sessionId      {string}   — attached to backend request for session storage
@@ -44,10 +44,11 @@ function stressLabel(s) {
 }
 
 function MiniScore({ label, value, colorFn, isText = false }) {
+  const isNull = value == null;
   return (
     <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-2.5 py-2 min-w-[58px]">
-      <span className={`text-sm font-extrabold leading-none ${colorFn(value)}`}>
-        {isText ? stressLabel(value) : value}
+      <span className={`text-sm font-extrabold leading-none ${isNull ? "text-gray-300" : colorFn(value)}`}>
+        {isNull ? "—" : isText ? stressLabel(value) : value}
       </span>
       <span className="text-[9px] text-gray-400 mt-0.5 text-center leading-tight">{label}</span>
     </div>
@@ -232,7 +233,7 @@ export default function VideoRecorder({
         {vs === VS.idle && (
           <div className="space-y-2">
             <p className="text-[11px] text-gray-500 leading-relaxed">
-              Enable your webcam to get engagement, eye-contact, and posture scores.
+              Enable your webcam to get engagement, framing, and stability scores.
             </p>
             <button
               type="button"
@@ -350,31 +351,57 @@ export default function VideoRecorder({
         {/* ── Results ──────────────────────────────────────────────────────── */}
         {vs === VS.done && result && (
           <div className="space-y-3">
-            {/* Mode badge */}
-            <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border uppercase tracking-wide
-                ${result.mode === "fallback"
-                  ? "bg-amber-50 text-amber-700 border-amber-200"
-                  : "bg-green-50 text-green-700 border-green-200"}`}
-              >
-                {result.mode === "fallback" ? "Heuristic"
-                  : result.mode === "opencv_mediapipe" ? "MediaPipe"
-                  : "OpenCV"}
-              </span>
-              {result.frames_analyzed != null && (
-                <span className="text-[10px] text-gray-400">
-                  {result.frames_analyzed} frames · {Math.round((result.face_detection_rate ?? 0) * 100)}% face
-                </span>
-              )}
-            </div>
+            {result.status === "invalid_analysis" ? (
+              /* Invalid analysis gate */
+              <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 space-y-1">
+                <p className="text-xs font-semibold text-red-700">Analysis unsuccessful</p>
+                <p className="text-[10px] text-red-600 leading-relaxed">
+                  {result.reason ?? "Insufficient face visibility for reliable analysis."}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Mode badge */}
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border uppercase tracking-wide
+                    ${result.mode === "fallback"
+                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                      : "bg-green-50 text-green-700 border-green-200"}`}
+                  >
+                    {result.mode === "fallback" ? "Heuristic"
+                      : result.mode === "opencv_mediapipe" ? "MediaPipe"
+                      : "OpenCV"}
+                  </span>
+                  {result.frames_analyzed != null && (
+                    <span className="text-[10px] text-gray-400">
+                      {result.frames_analyzed} frames · {Math.round((result.face_detection_rate ?? 0) * 100)}% face
+                    </span>
+                  )}
+                </div>
 
-            {/* Score pills */}
-            <div className="flex flex-wrap gap-1.5">
-              <MiniScore label="Engagement"  value={result.engagement_score}  colorFn={scoreColor} />
-              <MiniScore label="Eye Contact" value={result.eye_contact_score} colorFn={scoreColor} />
-              <MiniScore label="Posture"     value={result.posture_score}     colorFn={scoreColor} />
-              <MiniScore label="Stress"      value={result.stress_indicator}  colorFn={stressColor} isText />
-            </div>
+                {/* Score pills */}
+                <div className="flex flex-wrap gap-1.5">
+                  <MiniScore label="Engagement" value={result.engagement_score}  colorFn={scoreColor} />
+                  <MiniScore label="Framing"    value={result.framing_score}     colorFn={scoreColor} />
+                  <MiniScore label="Stability"  value={result.stability_score}   colorFn={scoreColor} />
+                  <MiniScore label="Motion"     value={result.movement_activity} colorFn={stressColor} isText />
+                </div>
+
+                {/* Warning */}
+                {result.warning && (
+                  <p className="text-[10px] text-amber-600">{result.warning}</p>
+                )}
+
+                {/* Analysis notes */}
+                {result.analysis_notes?.length > 0 && (
+                  <ul className="space-y-0.5">
+                    {result.analysis_notes.map((note, i) => (
+                      <li key={i} className="text-[10px] text-gray-500">· {note}</li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
 
             {/* Re-analyse */}
             <button
