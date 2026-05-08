@@ -1,3 +1,70 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Print / PDF export styles ──────────────────────────────────────────── */
+@media print {
+  /* Hide interactive chrome */
+  nav,
+  header,
+  .sticky,
+  button,
+  a[href="/roles"],
+  [data-no-print] {
+    display: none !important;
+  }
+
+  /* Reset backgrounds so content is readable */
+  body,
+  html {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+  }
+
+  /* Prevent hero gradient from printing as black */
+  .bg-gradient-to-br {
+    background: #4f46e5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Make sure coloured score cards print correctly */
+  .bg-green-50,
+  .bg-orange-50,
+  .bg-amber-50,
+  .bg-indigo-50,
+  .bg-red-50,
+  .bg-blue-50 {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Max width for print */
+  .max-w-5xl {
+    max-width: 100% !important;
+    padding: 0 8mm !important;
+  }
+
+  /* Avoid page breaks inside cards */
+  .rounded-2xl,
+  .rounded-xl {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Chart containers — hide recharts in print (they don't scale well) */
+  .recharts-wrapper {
+    display: none !important;
+  }
+
+  /* Show a "Charts hidden in print" note */
+  .recharts-wrapper + * {
+    margin-top: 0;
+  }
+
+  /* Footer links */
+  .flex.flex-col.sm\\:flex-row.items-center.justify-center.gap-4.pt-2.pb-4 {
+    display: none !important;
+  }
+}

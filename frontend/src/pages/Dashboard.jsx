@@ -57,11 +57,22 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [candidateId, setCandidateId] = useState(null);
   const [sessionId, setSessionId] = useState(null);
+  const [resumeInput, setResumeInput] = useState("");
+  const [resumeError, setResumeError] = useState("");
 
   useEffect(() => {
     setCandidateId(localStorage.getItem("candidate_id"));
     setSessionId(localStorage.getItem("last_session_id"));
   }, []);
+
+  function handleResumeSession(e) {
+    e.preventDefault();
+    const id = resumeInput.trim();
+    if (!id) { setResumeError("Please enter a session ID."); return; }
+    if (id.length < 8) { setResumeError("Session ID looks too short — please check and try again."); return; }
+    setResumeError("");
+    navigate(`/interview/${id}`);
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12 space-y-12">
@@ -104,6 +115,40 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Resume session by ID */}
+      <section>
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Resume a Session</h2>
+        <form onSubmit={handleResumeSession} className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={resumeInput}
+              onChange={(e) => { setResumeInput(e.target.value); setResumeError(""); }}
+              placeholder="Paste a session ID to continue…"
+              className="w-full text-sm text-gray-800 placeholder-gray-400 border border-gray-200 rounded-xl
+                px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition-shadow"
+            />
+          </div>
+          <button
+            type="submit"
+            className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold text-sm
+              transition-colors shrink-0 flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+            Go to Session
+          </button>
+        </form>
+        {resumeError && (
+          <p className="text-xs text-red-600 mt-2">{resumeError}</p>
+        )}
+        <p className="text-[11px] text-gray-400 mt-2">
+          Your session ID is shown in the interview room header (e.g. <code className="font-mono">a3f8c1…</code>).
+          Sessions are auto-saved — paste the ID to pick up where you left off.
+        </p>
+      </section>
 
       {/* Quick Actions */}
       <section>

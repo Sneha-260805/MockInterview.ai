@@ -498,6 +498,42 @@ _OPENING_BANK: dict[str, dict[str, dict]] = {
     },
 }
 
+# ── Behavioral question bank (role-agnostic, injected at Q3) ─────────────────
+
+_BEHAVIORAL_BANK: list[dict] = [
+    {
+        "q": "Tell me about a time you had to debug a critical production issue with users affected. Walk me through exactly what you did, step by step.",
+        "d": "medium", "t": "Behavioral & Communication",
+        "p": ["Describes the incident context clearly", "Explains systematic diagnosis approach", "Discusses how they communicated under pressure", "Shares the resolution and what was learned"],
+    },
+    {
+        "q": "Describe a situation where you disagreed with a technical decision your team or manager made. How did you handle it, and what was the outcome?",
+        "d": "medium", "t": "Behavioral & Communication",
+        "p": ["States the disagreement clearly and professionally", "Explains how they raised their concern", "Shows respect for the final decision", "Reflects on what they learned from the experience"],
+    },
+    {
+        "q": "Tell me about a project where requirements changed significantly mid-way through. How did you adapt, and what would you do differently now?",
+        "d": "medium", "t": "Behavioral & Communication",
+        "p": ["Describes the scope change with specifics", "Explains how they reprioritised and communicated", "Discusses impact on timeline and quality", "Reflects on process improvements they'd make"],
+    },
+    {
+        "q": "Describe a time you had to learn a completely new technology or framework quickly to deliver a project. What was your approach, and how did it go?",
+        "d": "easy", "t": "Behavioral & Communication",
+        "p": ["Names the technology and explains the context", "Describes a structured learning strategy", "Discusses how they validated their understanding", "Shares the outcome and any shortcuts taken"],
+    },
+    {
+        "q": "Tell me about a meaningful mistake you made on a project. What happened, and more importantly, what did you change as a result?",
+        "d": "easy", "t": "Behavioral & Communication",
+        "p": ["Describes the mistake honestly without deflecting", "Explains the immediate impact", "Discusses concrete changes made to prevent recurrence", "Shows self-awareness and growth mindset"],
+    },
+    {
+        "q": "Describe a time you had to collaborate closely with someone whose working style was very different from yours. How did you make it work?",
+        "d": "easy", "t": "Behavioral & Communication",
+        "p": ["Describes the style differences specifically", "Explains how they adapted their communication", "Shows empathy and flexibility", "Shares the outcome and what they took from it"],
+    },
+]
+
+
 _GENERIC_OPENING = {
     "topic": "Role Introduction",
     "question": "Tell me about yourself and what drew you to this role. Which project or achievement from your background are you most proud of, and why?",
@@ -755,6 +791,28 @@ async def next_question(
     # Project follow-up detection from last answer text
     last_answer_text = answers[-1]["answer_text"] if answers else ""
     project_followup = bool(last_answer_text) and _mentions_project(last_answer_text)
+
+    # ── Behavioral question injection at Q3 ───────────────────────────────────
+    # Always include one behavioral question mid-interview to assess soft skills.
+    if n_answered == 2 and "Behavioral & Communication" not in covered_topics:
+        import random
+        behavioral_q = random.choice(_BEHAVIORAL_BANK)
+        asked_starts = {q["question"][:30] for q in questions_asked}
+        # Pick one not already asked
+        for bq in _BEHAVIORAL_BANK:
+            if bq["q"][:30] not in asked_starts:
+                behavioral_q = bq
+                break
+        next_q = Question(
+            question_id=_qid(), question=behavioral_q["q"],
+            difficulty=behavioral_q["d"], topic=behavioral_q["t"],
+            expected_points=behavioral_q["p"],
+        )
+        reason = (
+            "You're doing well on the technical questions. "
+            "Shifting briefly to a behavioral question to get a rounded picture of how you work."
+        )
+        return next_q, reason, False
 
     if project_followup and req.current_topic != "Project Deep Dive":
         next_q = Question(

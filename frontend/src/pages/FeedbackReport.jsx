@@ -106,19 +106,31 @@ const IconCalendar = () => (
 );
 
 
+const REPORT_TIMEOUT_MS = 30_000;
+
+function withTimeout(promise, ms) {
+  const timer = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("Report generation timed out. The AI is taking longer than usual — please retry.")), ms)
+  );
+  return Promise.race([promise, timer]);
+}
+
 export default function FeedbackReport() {
   const { sessionId } = useParams();
-  const [report,  setReport]  = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState("");
+  const [report,     setReport]     = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState("");
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!sessionId) { setError("No session ID in the URL."); setLoading(false); return; }
-    generateFinalReport(sessionId)
+    setLoading(true);
+    setError("");
+    withTimeout(generateFinalReport(sessionId), REPORT_TIMEOUT_MS)
       .then(setReport)
       .catch((e) => setError(e.message || "Could not generate report."))
       .finally(() => setLoading(false));
-  }, [sessionId]);
+  }, [sessionId, retryCount]);
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
@@ -143,10 +155,22 @@ export default function FeedbackReport() {
               d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
           </svg>
         </div>
-        <p className="text-gray-700 font-medium">{error || "Report unavailable."}</p>
-        <Link to="/roles" className="px-5 py-2.5 bg-brand-500 text-white rounded-xl font-semibold text-sm hover:bg-brand-600 transition-colors">
-          Back to Roles
-        </Link>
+        <p className="text-gray-700 font-medium max-w-sm">{error || "Report unavailable."}</p>
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <button
+            onClick={() => setRetryCount((c) => c + 1)}
+            className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            Retry
+          </button>
+          <Link to="/roles" className="px-5 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl font-semibold text-sm hover:border-gray-300 transition-colors">
+            Back to Roles
+          </Link>
+        </div>
       </div>
     );
   }

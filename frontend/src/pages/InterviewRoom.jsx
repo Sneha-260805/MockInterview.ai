@@ -354,7 +354,7 @@ export default function InterviewRoom() {
     <div className="min-h-screen bg-gray-50">
       <TopBar session={session} />
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
 
         {/* ── Left column ───────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-5">
@@ -638,13 +638,15 @@ export default function InterviewRoom() {
         {/* ── Right column — sidebar ───────────────────────────────── */}
         <div className="space-y-4">
 
-          {/* Video monitor — always at top of sidebar */}
-          <VideoRecorder
-            sessionId={session?.session_id}
-            questionNumber={questionNumber}
-            onResult={(data) => setVideoResult(data)}
-            disabled={isEvaluating}
-          />
+          {/* Video monitor — hidden on mobile, shown on large screens */}
+          <div className="hidden lg:block">
+            <VideoRecorder
+              sessionId={session?.session_id}
+              questionNumber={questionNumber}
+              onResult={(data) => setVideoResult(data)}
+              disabled={isEvaluating}
+            />
+          </div>
 
           {/* Phase 11: Candidate state panel (skill mastery + profile) */}
           {candidateState ? (
@@ -782,22 +784,24 @@ export default function InterviewRoom() {
             </SidebarCard>
           )}
 
-          <SidebarCard title="Interview Tips">
-            <ul className="space-y-2.5">
-              {[
-                "Use the STAR method — Situation, Task, Action, Result.",
-                "Be specific with numbers and outcomes where possible.",
-                "Mention trade-offs — interviewers value nuanced thinking.",
-                "Draw on real projects whenever possible.",
-                "It's fine to pause and structure your thoughts first.",
-              ].map((tip, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs text-gray-600">
-                  <span className="mt-0.5 text-brand-400 font-bold shrink-0">{i + 1}.</span>
-                  {tip}
-                </li>
-              ))}
-            </ul>
-          </SidebarCard>
+          <div className="hidden lg:block">
+            <SidebarCard title="Interview Tips">
+              <ul className="space-y-2.5">
+                {[
+                  "Use the STAR method — Situation, Task, Action, Result.",
+                  "Be specific with numbers and outcomes where possible.",
+                  "Mention trade-offs — interviewers value nuanced thinking.",
+                  "Draw on real projects whenever possible.",
+                  "It's fine to pause and structure your thoughts first.",
+                ].map((tip, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-gray-600">
+                    <span className="mt-0.5 text-brand-400 font-bold shrink-0">{i + 1}.</span>
+                    {tip}
+                  </li>
+                ))}
+              </ul>
+            </SidebarCard>
+          </div>
         </div>
       </div>
     </div>
@@ -807,16 +811,46 @@ export default function InterviewRoom() {
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function TopBar({ session }) {
+  const [copied, setCopied] = useState(false);
+
+  function copySessionId() {
+    if (!session?.session_id) return;
+    navigator.clipboard.writeText(session.session_id).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
-    <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-10">
-      <div className="flex items-center gap-3">
-        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-        <span className="text-sm font-semibold text-gray-800">{session?.selected_role}</span>
-        <span className="text-gray-300">·</span>
-        <span className="text-xs text-gray-400 font-mono hidden sm:inline">{session?.session_id}</span>
+    <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-10">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+        <span className="text-sm font-semibold text-gray-800 truncate">{session?.selected_role}</span>
+        {session?.session_id && (
+          <>
+            <span className="text-gray-300 hidden sm:inline">·</span>
+            <button
+              onClick={copySessionId}
+              title="Copy session ID"
+              className="hidden sm:flex items-center gap-1 text-xs text-gray-400 font-mono hover:text-gray-700 transition-colors group"
+            >
+              <span>{session.session_id.slice(0, 8)}…</span>
+              {copied ? (
+                <svg className="w-3 h-3 text-green-500" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              ) : (
+                <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+                </svg>
+              )}
+            </button>
+          </>
+        )}
       </div>
-      <Link to="/roles" className="text-xs text-gray-400 hover:text-gray-700 transition-colors">
-        ← Exit interview
+      <Link to="/roles" className="text-xs text-gray-400 hover:text-gray-700 transition-colors shrink-0">
+        ← Exit
       </Link>
     </div>
   );

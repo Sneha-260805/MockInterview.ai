@@ -14,7 +14,7 @@ from agents import resume_agent, role_agent
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
 
-ALLOWED_EXTENSIONS = {"pdf", "txt"}
+ALLOWED_EXTENSIONS = {"pdf", "txt", "docx"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
@@ -27,7 +27,7 @@ async def upload_resume(file: UploadFile = File(...)):
     if _ext(file.filename) not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type. Upload a PDF or TXT file.",
+            detail="Unsupported file type. Upload a PDF, DOCX, or TXT file.",
         )
 
     file_bytes = await file.read()
