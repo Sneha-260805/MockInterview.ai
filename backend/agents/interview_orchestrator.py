@@ -542,10 +542,10 @@ def _build_static(analysis: ResumeAnalysis, role: str) -> Question:
 async def _generate_first_with_llm(analysis: ResumeAnalysis, role: str) -> Question | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or not settings.anthropic_api_key:
+    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
         return None
     try:
-        import anthropic
+        from services.llm_client import call_llm
         p_line = ""
         if analysis.projects:
             p = analysis.projects[0]
@@ -556,12 +556,10 @@ async def _generate_first_with_llm(analysis: ResumeAnalysis, role: str) -> Quest
             "Generate the FIRST interview question. Rules: difficulty='easy', reference project if listed, open-ended.\n"
             'Return ONLY JSON: {"question":"...","topic":"...","expected_points":["...","...","...","..."]}'
         )
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
-            model="claude-sonnet-4-6", max_tokens=512,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        m = re.search(r"\{.*\}", response.content[0].text, re.DOTALL)
+        raw = await call_llm(prompt, max_tokens=512)
+        if raw is None:
+            return None
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
         if m:
             data = json.loads(m.group(0))
             return Question(
@@ -691,10 +689,10 @@ async def _generate_next_with_llm(
 ) -> Question | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or not settings.anthropic_api_key:
+    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
         return None
     try:
-        import anthropic
+        from services.llm_client import call_llm
         questions_summary = [
             f"Q{i+1}: [{q['topic']}] {q['question'][:60]}…"
             for i, q in enumerate(session_data.get("questions_asked", []))
@@ -711,12 +709,10 @@ async def _generate_next_with_llm(
             "Return ONLY valid JSON:\n"
             '{"question":"...","difficulty":"easy|medium|hard","topic":"...","expected_points":["...","...","..."]}'
         )
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
-            model="claude-sonnet-4-6", max_tokens=512,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        m = re.search(r"\{.*\}", response.content[0].text, re.DOTALL)
+        raw = await call_llm(prompt, max_tokens=512)
+        if raw is None:
+            return None
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
         if m:
             data = json.loads(m.group(0))
             return Question(

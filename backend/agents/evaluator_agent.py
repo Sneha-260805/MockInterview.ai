@@ -28,11 +28,11 @@ logger = logging.getLogger(__name__)
 async def _llm_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or not settings.anthropic_api_key:
+    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
         return None
 
     try:
-        import anthropic
+        from services.llm_client import call_llm
 
         prompt = (
             "You are an expert technical interviewer evaluating a candidate's answer.\n\n"
@@ -51,13 +51,9 @@ async def _llm_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult | None:
             "For covered_points and missing_points use the EXACT strings from the expected_points list."
         )
 
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=600,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = response.content[0].text
+        raw = await call_llm(prompt, max_tokens=600)
+        if raw is None:
+            return None
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         if not m:
             return None

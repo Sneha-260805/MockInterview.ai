@@ -14,7 +14,9 @@ class Settings(BaseSettings):
 
     # Optional LLM support — set USE_LLM=true and provide the key to enable
     use_llm: bool = False
+    llm_provider: str = "anthropic"   # "anthropic" | "gemini"
     anthropic_api_key: str = ""
+    gemini_api_key: str = ""
 
     # Adzuna live job API
     adzuna_app_id: str = ""

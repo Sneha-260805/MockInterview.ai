@@ -445,10 +445,10 @@ async def _llm_feedback(
 ) -> str | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or not settings.anthropic_api_key:
+    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
         return None
     try:
-        import anthropic
+        from services.llm_client import call_llm
         qa_lines = "\n".join(
             f"Q{i+1} [{a.get('question','')[:55]}…]: "
             f"Technical={a['evaluation']['technical_score']}, "
@@ -471,12 +471,8 @@ async def _llm_feedback(
             "Name specific topics they covered well and specific gaps to address. "
             "End with one concrete actionable next step. Plain prose — no bullets, no headings."
         )
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
-            model="claude-sonnet-4-6", max_tokens=650,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text.strip()
+        result = await call_llm(prompt, max_tokens=650)
+        return result.strip() if result else None
     except Exception as exc:
         logger.warning("LLM final feedback failed: %s", exc)
     return None

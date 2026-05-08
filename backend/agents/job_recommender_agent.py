@@ -242,10 +242,10 @@ async def _llm_why_fit(
 ) -> str | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or not settings.anthropic_api_key:
+    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
         return None
     try:
-        import anthropic
+        from services.llm_client import call_llm
         prompt = (
             f"Write ONE concise sentence (max 35 words) explaining why this candidate "
             f"is a good fit for the job. Be specific and mention matched skills.\n\n"
@@ -258,12 +258,8 @@ async def _llm_why_fit(
             f"Match score: {score}/100\n\n"
             "Return ONLY the sentence. No prefix, no explanation."
         )
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
-            model="claude-sonnet-4-6", max_tokens=80,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text.strip()
+        result = await call_llm(prompt, max_tokens=80)
+        return result.strip() if result else None
     except Exception as exc:
         logger.warning("LLM why_fit failed for %s: %s", job.job_id, exc)
     return None
