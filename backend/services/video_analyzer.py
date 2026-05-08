@@ -4,10 +4,10 @@ Phase 9 — Video Intelligence analyser (improved heuristics).
 Accepts either a short video clip (webm/mp4) or a single JPEG/PNG frame
 and returns:
     engagement_score   — 0-100  face presence rate (honest proxy)
-    framing_score      — 0-100  face centred in frame (centering proxy, not gaze)
+    framing_score      — 0-100  face centred in frame (centering proxy for eye contact)
     stability_score    — 0-100  face-size variance across frames (distance stability)
                                 None when fewer than 3 valid frames exist
-    movement_activity  — "low" | "medium" | "high"  head-movement intensity
+    movement_activity  — "low" | "medium" | "high"  head-movement / nervousness indicator
     status             — "ok" | "invalid_analysis"
     analysis_notes     — list of human-readable explanations for each metric
     mode               — "opencv_mediapipe" | "opencv" | "fallback"
@@ -20,22 +20,26 @@ Engine priority
      → Haar Cascade face detector bundled with cv2
 3. Fallback            → conservative seeded heuristics (no frames opened)
 
-Invalid analysis gate
-─────────────────────
-face_detection_rate < 0.30 OR fewer than 3 face detections → status="invalid_analysis"
-All scores set to None.  Frontend should display an explicit warning.
+Invalid analysis gate (any condition triggers it)
+──────────────────────────────────────────────────
+• face_detection_rate < 0.35 after excluding passerby intrusions
+• fewer than 3 candidate face detections
+• longest gap of consecutive no-face frames > 14 sampled frames
+  (≈ 7 s in a 15 s clip at 30 fps sampled every 15th frame)
+
+Passerby / disturbance handling
+────────────────────────────────
+• When multiple faces are detected in a frame the one closest to the
+  frame centre is chosen as the candidate (the interviewee sits centred).
+• Any frame where the chosen face area exceeds 2.8× the median candidate
+  face area is marked as a "passerby intrusion" and excluded from scoring
+  (a person walking close to the camera produces an abnormally large bbox).
 
 Score calibration targets
 ─────────────────────────
 Poor session:    15–40
 Average session: 50–70
 Strong session:  75–90
-
-Frame sampling fix
-──────────────────
-Uses seek-based uniform sampling when frame count is known.
-Falls back to sequential step-sampling (every 15th frame) for WebM
-containers where CAP_PROP_FRAME_COUNT returns 0.
 """
 
 import logging
@@ -88,13 +92,22 @@ def _get_face_cascade():
 
 # ── Validity thresholds ───────────────────────────────────────────────────────
 
-_MIN_DETECTION_RATE = 0.30   # below this → invalid_analysis
-_MIN_VALID_FACES    = 3      # fewer face detections → stability_score = None
+_MIN_DETECTION_RATE  = 0.35   # below this → invalid_analysis (raised from 0.30)
+_MIN_VALID_FACES     = 3      # fewer face detections → stability_score = None
+_MAX_INVALID_GAP     = 14     # longest consecutive no-face streak above this → invalid
+_PASSERBY_AREA_RATIO = 2.8    # face area > ratio × median → passerby, excluded from scores
 
 # ── Frame result dict:
 #   has_face, cx, cy, size, center_dist  (all positions in [0, 1] relative coords)
 
-_MISS = {"has_face": False, "cx": 0.5, "cy": 0.5, "size": 0.0, "center_dist": 0.5}
+_MISS = {
+    "has_face": False,
+    "cx": 0.5,
+    "cy": 0.5,
+    "size": 0.0,
+    "center_dist": 0.5,
+    "edge_margin": 0.0,
+}
 
 
 # ── Per-frame face detectors ──────────────────────────────────────────────────
@@ -105,13 +118,19 @@ def _face_info_haar(frame_bgr) -> dict:
     faces   = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
     if not len(faces):
         return _MISS.copy()
-    h, w        = frame_bgr.shape[:2]
-    x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])   # largest face
+    h, w = frame_bgr.shape[:2]
+    # Pick the face closest to the frame centre (candidate sits centred; passersby are at edges)
+    def _centre_dist(f):
+        return ((f[0] + f[2] / 2) / w - 0.5) ** 2 + ((f[1] + f[3] / 2) / h - 0.5) ** 2
+    x, y, fw, fh = min(faces, key=_centre_dist)
     cx   = (x + fw / 2) / w
     cy   = (y + fh / 2) / h
     size = (fw * fh) / (w * h)
+    left, top, right, bottom = x / w, y / h, (x + fw) / w, (y + fh) / h
+    edge_margin = min(left, top, 1 - right, 1 - bottom)
     return {"has_face": True, "cx": cx, "cy": cy, "size": size,
-            "center_dist": math.sqrt((cx - 0.5) ** 2 + (cy - 0.5) ** 2)}
+            "center_dist": math.sqrt((cx - 0.5) ** 2 + (cy - 0.5) ** 2),
+            "edge_margin": edge_margin}
 
 
 def _face_info_mediapipe(frame_bgr, detector) -> dict:
@@ -119,13 +138,24 @@ def _face_info_mediapipe(frame_bgr, detector) -> dict:
     result = detector.process(rgb)
     if not result.detections:
         return _MISS.copy()
-    det  = result.detections[0]          # highest-confidence detection
-    bb   = det.location_data.relative_bounding_box
+    # When multiple faces present (passerby walked into frame), pick the one
+    # closest to the frame centre — the candidate sits directly in front of the camera.
+    best, best_sq = None, float("inf")
+    for det in result.detections:
+        bb  = det.location_data.relative_bounding_box
+        fcx = bb.xmin + bb.width  / 2
+        fcy = bb.ymin + bb.height / 2
+        sq  = (fcx - 0.5) ** 2 + (fcy - 0.5) ** 2
+        if sq < best_sq:
+            best_sq, best = sq, det
+    bb   = best.location_data.relative_bounding_box
     cx   = bb.xmin + bb.width  / 2
     cy   = bb.ymin + bb.height / 2
     size = bb.width * bb.height
+    edge_margin = min(bb.xmin, bb.ymin, 1 - (bb.xmin + bb.width), 1 - (bb.ymin + bb.height))
     return {"has_face": True, "cx": cx, "cy": cy, "size": size,
-            "center_dist": math.sqrt((cx - 0.5) ** 2 + (cy - 0.5) ** 2)}
+            "center_dist": math.sqrt((cx - 0.5) ** 2 + (cy - 0.5) ** 2),
+            "edge_margin": edge_margin}
 
 
 # ── Score computation ─────────────────────────────────────────────────────────
@@ -134,14 +164,18 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
     """
     Compute all video scores from per-frame face detection results.
 
-    Returns status="invalid_analysis" (all scores None) when:
-      - no frames at all
-      - face_detection_rate < _MIN_DETECTION_RATE
-      - fewer than _MIN_VALID_FACES frames had a face
+    Invalid analysis is returned when ANY of these conditions hold:
+      • no frames extracted
+      • longest consecutive no-face streak > _MAX_INVALID_GAP (candidate left / camera blocked)
+      • candidate face detection rate < _MIN_DETECTION_RATE after passerby exclusion
+      • fewer than _MIN_VALID_FACES clean candidate frames
 
-    Otherwise returns status="ok" with calibrated scores and explanation notes.
+    Passerby intrusion filtering:
+      Frames where the selected (most-central) face area exceeds
+      _PASSERBY_AREA_RATIO × median area are treated as contaminated and
+      excluded from all score calculations.
     """
-    total     = len(frame_data)
+    total = len(frame_data)
     if total == 0:
         return {
             "status":              "invalid_analysis",
@@ -155,22 +189,72 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
             "warning":             None,
         }
 
-    with_face      = [f for f in frame_data if f["has_face"]]
+    # ── Gap analysis: detect camera-blocked / candidate-left-frame ────────────
+    presence = [f["has_face"] for f in frame_data]
+    max_gap  = cur_gap = 0
+    for present in presence:
+        if not present:
+            cur_gap += 1
+            max_gap  = max(max_gap, cur_gap)
+        else:
+            cur_gap = 0
+
+    if max_gap > _MAX_INVALID_GAP:
+        return {
+            "status": "invalid_analysis",
+            "reason": (
+                f"No face detected for {max_gap} consecutive frames — the camera was "
+                "blocked or you left the frame for an extended period. "
+                "Record in a stable, uninterrupted environment."
+            ),
+            "engagement_score":    None,
+            "framing_score":       None,
+            "stability_score":     None,
+            "movement_activity":   None,
+            "face_detection_rate": round(sum(presence) / total, 3),
+            "analysis_notes":      [],
+            "warning":             None,
+        }
+
+    # ── Passerby intrusion filter ─────────────────────────────────────────────
+    # A person walking very close to the camera produces a face bbox far larger
+    # than the candidate's.  Exclude frames where face area > ratio × median.
+    raw_with_face = [f for f in frame_data if f["has_face"]]
+    if len(raw_with_face) >= 3:
+        sorted_sizes  = sorted(f["size"] for f in raw_with_face)
+        median_size   = sorted_sizes[len(sorted_sizes) // 2]
+        area_ceiling  = median_size * _PASSERBY_AREA_RATIO
+        with_face     = [f for f in raw_with_face if f["size"] <= area_ceiling]
+        passerby_cnt  = len(raw_with_face) - len(with_face)
+    else:
+        with_face    = raw_with_face
+        passerby_cnt = 0
+
     detection_rate = len(with_face) / total
 
     # ── Invalid analysis gate ─────────────────────────────────────────────────
     if detection_rate < _MIN_DETECTION_RATE or len(with_face) < _MIN_VALID_FACES:
         if len(with_face) < _MIN_VALID_FACES:
             reason = (
-                f"Only {len(with_face)} frame(s) with a detected face — "
+                f"Only {len(with_face)} usable frame(s) with a detected face — "
                 "too few for reliable analysis. Ensure good lighting and "
-                "that your face is clearly visible."
+                "that your face is clearly visible throughout the recording."
             )
         else:
+            pct = round(detection_rate * 100)
             reason = (
-                f"Face detected in only {round(detection_rate * 100)}% of frames "
-                "(threshold: 30%). Check lighting, camera angle, and frame position."
+                f"Candidate face detected in only {pct}% of frames "
+                f"(threshold: {round(_MIN_DETECTION_RATE * 100)}%). "
             )
+            if passerby_cnt:
+                reason += (
+                    f"{passerby_cnt} frame(s) were excluded due to background intrusion. "
+                )
+            if max_gap > 5:
+                reason += (
+                    f"The longest gap without a face was {max_gap} frames. "
+                )
+            reason += "Try recording alone in a quiet space facing the camera directly."
         return {
             "status":              "invalid_analysis",
             "reason":              reason,
@@ -184,27 +268,55 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
         }
 
     notes: list[str] = []
-
-    # ── Engagement: face presence rate ────────────────────────────────────────
-    # 30% → ~37 (poor)  |  70% → ~66 (average)  |  100% → ~88 (strong)
-    engagement = int(max(15, min(88, 15 + detection_rate * 73)))
-
-    if detection_rate >= 0.85:
-        notes.append("Face remained consistently visible throughout.")
-    elif detection_rate >= 0.60:
-        notes.append("Face was visible in most frames.")
-    else:
-        notes.append("Frequent face loss detected — check lighting and camera angle.")
+    if passerby_cnt:
+        notes.append(
+            f"Background intrusion detected in {passerby_cnt} frame(s) — "
+            "excluded from scoring. Scores reflect candidate visibility only."
+        )
+    if max_gap > 5:
+        notes.append(
+            f"Longest gap without a face: {max_gap} sampled frames — "
+            "try to keep your face visible throughout."
+        )
 
     # ── Framing: face centred in frame (outlier-filtered) ─────────────────────
-    # Trim worst 10% of center_dist values to avoid single bad frames tanking score.
-    # center_dist=0.0 → 88 (strong)  |  0.20 → 55 (average)  |  0.40 → 22 (poor)
     dists      = sorted(f["center_dist"] for f in with_face)
     trim_count = max(1, int(len(dists) * 0.90))   # keep best 90%
     avg_dist   = mean(dists[:trim_count])
     framing    = int(max(15, min(88, 88 - avg_dist * 165)))
 
-    if avg_dist < 0.08:
+    edge_margins = sorted(f.get("edge_margin", 0.0) for f in with_face)
+    avg_edge_margin = mean(edge_margins[:trim_count])
+    is_edge_cropped = avg_edge_margin < 0.025
+    is_poorly_framed = avg_dist >= 0.24
+
+    # ── Engagement: face presence plus usable frame quality ───────────────────
+    # A face detected at the edge of the frame should not look "high engagement".
+    # Good: 80-88. Poorly framed/cropped: capped to 35-58 even with high detection.
+    usable_frame_quality = max(0.0, min(1.0, 1 - avg_dist * 2.2))
+    if is_edge_cropped:
+        usable_frame_quality *= 0.45
+    engagement = int(max(15, min(88, 15 + detection_rate * 35 + usable_frame_quality * 38)))
+    if is_edge_cropped:
+        engagement = min(engagement, 45)
+    elif is_poorly_framed:
+        engagement = min(engagement, 58)
+
+    if detection_rate < 0.60:
+        notes.append("Frequent face loss detected — check lighting and camera angle.")
+    elif is_edge_cropped:
+        notes.append("Face was detected but often cropped at the frame edge — keep your full face visible.")
+    elif is_poorly_framed:
+        notes.append("Face was visible but poorly framed — center your face before recording.")
+    elif detection_rate >= 0.85:
+        notes.append("Face remained consistently visible throughout.")
+    else:
+        notes.append("Face was visible in most frames.")
+
+    if is_edge_cropped:
+        framing = min(framing, 35)
+        notes.append("Face was too close to the edge of the camera view.")
+    elif avg_dist < 0.08:
         notes.append("Face remained consistently centered in frame.")
     elif avg_dist < 0.18:
         notes.append("Face was generally well-positioned in frame.")
@@ -223,8 +335,16 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
         sizes    = [f["size"] for f in with_face]
         size_std = stdev(sizes)
         stability = int(max(15, min(85, 85 - size_std * 440)))
+        if is_edge_cropped:
+            stability = min(stability, 45)
+        elif is_poorly_framed:
+            stability = min(stability, 65)
 
-        if size_std < 0.025:
+        if is_edge_cropped:
+            notes.append("Stability is reduced because the face was partially outside the frame.")
+        elif is_poorly_framed:
+            notes.append("Stability is limited because the camera framing was poor.")
+        elif size_std < 0.025:
             notes.append("Camera distance remained stable throughout.")
         elif size_std < 0.065:
             notes.append("Minor variation in camera distance observed.")
