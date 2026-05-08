@@ -18,6 +18,7 @@ import re
 
 from models.interview import EvaluateAnswerRequest, EvaluationResult
 from services import scoring_service as sc
+from services import rubric_service as rubric
 
 logger = logging.getLogger(__name__)
 
@@ -113,10 +114,34 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
     )
 
 
+def _add_rubric_scores(result: EvaluationResult, req: EvaluateAnswerRequest) -> EvaluationResult:
+    """
+    Phase 11: Enrich an EvaluationResult with rubric-based scores.
+    Topic is extracted from the question text heuristically when not directly available.
+    Always falls back gracefully if topic cannot be determined.
+    """
+    try:
+        # Infer topic from the request if possible
+        topic = getattr(req, "topic", None) or ""
+        rubric_data = rubric.score_with_rubric(req.answer, topic, req.expected_points)
+        return result.model_copy(update={
+            "rubric_scores":          rubric_data["rubric_scores"],
+            "rubric_total":           rubric_data["rubric_total"],
+            "evidence":               rubric_data["evidence"],
+            "improvement_hint":       rubric_data["improvement_hint"],
+            "interviewer_diagnosis":  rubric_data["interviewer_diagnosis"],
+        })
+    except Exception as exc:
+        logger.warning("Rubric scoring failed (non-fatal): %s", exc)
+        return result
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 async def evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
     result = await _llm_evaluate(req)
     if result is None:
         result = _rule_evaluate(req)
+    # Phase 11: always enrich with rubric scores
+    result = _add_rubric_scores(result, req)
     return result

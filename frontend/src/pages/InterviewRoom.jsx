@@ -5,6 +5,9 @@ import EvaluationPanel from "../components/EvaluationPanel";
 import AdaptationBadge from "../components/AdaptationBadge";
 import AudioRecorder from "../components/AudioRecorder";
 import VideoRecorder from "../components/VideoRecorder";
+import InterviewPlanTimeline from "../components/InterviewPlanTimeline";
+import AgentTracePanel from "../components/AgentTracePanel";
+import { CandidateStatePanel } from "../components/SkillMasteryMap";
 import { getSession, evaluateAnswer, nextQuestion } from "../services/interviewService";
 
 // ── State machine constants ──────────────────────────────────────────────────
@@ -15,7 +18,7 @@ const NS = { idle: "idle", fetching: "fetching", error: "error" };
 // ── Confidence score derived from evaluation + answer length ─────────────────
 function deriveConfidence(evaluation, answerText) {
   const wordCount   = answerText.trim().split(/\s+/).length;
-  const lengthBonus = Math.min(wordCount / 150, 1) * 20; // up to +20 pts for length
+  const lengthBonus = Math.min(wordCount / 150, 1) * 20;
   const avg         = (evaluation.technical_score + evaluation.depth_score + evaluation.correctness_score) / 3;
   return Math.min(100, Math.round(avg * 0.8 + lengthBonus));
 }
@@ -27,6 +30,36 @@ function diffColor(diff) {
     : diff === "medium"
     ? "bg-yellow-50 text-yellow-600 border-yellow-200"
     : "bg-green-50 text-green-600 border-green-200";
+}
+
+// ── Rubric dimension metadata ─────────────────────────────────────────────────
+const RUBRIC_META = {
+  conceptual_correctness:    { label: "Conceptual Correctness", max: 30 },
+  practical_application:     { label: "Practical Application",  max: 25 },
+  depth_and_tradeoffs:       { label: "Depth & Trade-offs",     max: 20 },
+  communication_structure:   { label: "Communication",          max: 15 },
+  resume_project_connection: { label: "Project Connection",     max: 10 },
+};
+
+function RubricBar({ dimension, score }) {
+  const meta = RUBRIC_META[dimension] || { label: dimension, max: 30 };
+  const pct = Math.round((score / meta.max) * 100);
+  const color = pct >= 70 ? "bg-green-400" : pct >= 50 ? "bg-yellow-400" : "bg-red-400";
+  const textColor = pct >= 70 ? "text-green-700" : pct >= 50 ? "text-yellow-700" : "text-red-600";
+  return (
+    <div className="mb-2 last:mb-0">
+      <div className="flex justify-between mb-1">
+        <span className="text-xs text-gray-600">{meta.label}</span>
+        <span className={`text-xs font-bold tabular-nums ${textColor}`}>{score}/{meta.max}</span>
+      </div>
+      <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+        <div
+          className={`h-1.5 rounded-full transition-all duration-500 ${color}`}
+          style={{ width: `${Math.max(pct, 4)}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function InterviewRoom() {
@@ -60,12 +93,18 @@ export default function InterviewRoom() {
   const [questionsAnswered, setQuestionsAnswered] = useState(0);
   const maxQuestions = 5;
 
-  // ── Active question (what's currently on screen) ──────────────────────────
+  // ── Active question ───────────────────────────────────────────────────────
   const [activeQuestion, setActiveQuestion] = useState(null);
 
   // ── Audio & Video intelligence ─────────────────────────────────────────────
   const [audioResult, setAudioResult] = useState(null);
   const [videoResult, setVideoResult] = useState(null);
+
+  // ── Phase 11: Agent intelligence state ────────────────────────────────────
+  const [interviewPlan,  setInterviewPlan]  = useState(location.state?.session?.interview_plan  ?? []);
+  const [agentSummary,   setAgentSummary]   = useState(location.state?.session?.agent_summary   ?? "");
+  const [candidateState, setCandidateState] = useState(location.state?.session?.candidate_state ?? null);
+  const [decisionTrace,  setDecisionTrace]  = useState(null);
 
   // Auto-scroll to evaluation after submit
   const evalRef = useRef(null);
@@ -73,12 +112,14 @@ export default function InterviewRoom() {
   // ── Load session if not passed via router state ───────────────────────────
   useEffect(() => {
     if (session) {
-      // StartInterviewResponse  → first_question
-      // InterviewSession (GET)  → current_question | questions_asked[0]
       const q = session.first_question
              ?? session.current_question
              ?? session.questions_asked?.[0];
       setActiveQuestion(q);
+      // Populate Phase 11 data if available
+      if (session.interview_plan?.length)  setInterviewPlan(session.interview_plan);
+      if (session.agent_summary)           setAgentSummary(session.agent_summary);
+      if (session.candidate_state)         setCandidateState(session.candidate_state);
       return;
     }
     if (!sessionId) {
@@ -90,6 +131,9 @@ export default function InterviewRoom() {
       .then((d) => {
         setSession(d);
         setActiveQuestion(d.current_question ?? d.questions_asked?.[0]);
+        if (d.interview_plan?.length)  setInterviewPlan(d.interview_plan);
+        if (d.agent_summary)           setAgentSummary(d.agent_summary);
+        if (d.candidate_state)         setCandidateState(d.candidate_state);
         setStatus(S.ready);
       })
       .catch((e) => {
@@ -111,6 +155,7 @@ export default function InterviewRoom() {
     setSubmittedAnswer(answer);
     setEvalStatus(ES.evaluating);
     setEvalError("");
+    setDecisionTrace(null); // clear trace when submitting new answer
 
     try {
       const result = await evaluateAnswer({
@@ -169,6 +214,10 @@ export default function InterviewRoom() {
         setNextStatus(NS.idle);
         return;
       }
+
+      // Phase 11: capture decision trace & updated state
+      if (data.decision_trace)  setDecisionTrace(data.decision_trace);
+      if (data.candidate_state) setCandidateState(data.candidate_state);
 
       // Transition to the new question
       setAdaptationReason(data.reason_for_adaptation);
@@ -310,6 +359,15 @@ export default function InterviewRoom() {
         {/* ── Left column ───────────────────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-5">
 
+          {/* Phase 11: Personalised interview plan timeline */}
+          {interviewPlan.length > 0 && (
+            <InterviewPlanTimeline
+              plan={interviewPlan}
+              currentStep={questionNumber}
+              agentSummary={agentSummary}
+            />
+          )}
+
           {/* Adaptation badge (appears from Q2 onward) */}
           {adaptationReason && (
             <AdaptationBadge
@@ -317,6 +375,11 @@ export default function InterviewRoom() {
               questionNumber={questionNumber}
               maxQuestions={maxQuestions}
             />
+          )}
+
+          {/* Phase 11: Agent decision trace (shown after next question fetched) */}
+          {decisionTrace && (
+            <AgentTracePanel trace={decisionTrace} />
           )}
 
           {/* Active question */}
@@ -410,6 +473,75 @@ export default function InterviewRoom() {
           {isDone && evaluation && (
             <div ref={evalRef}>
               <EvaluationPanel evaluation={evaluation} />
+            </div>
+          )}
+
+          {/* Phase 11: Rubric breakdown */}
+          {isDone && evaluation && evaluation.rubric_scores && Object.keys(evaluation.rubric_scores).length > 0 && (
+            <div className="bg-white border border-indigo-100 rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-5 py-3 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2">
+                <svg className="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                </svg>
+                <span className="text-sm font-semibold text-indigo-700">Rubric Breakdown</span>
+                {evaluation.rubric_total != null && (
+                  <span className="ml-auto text-xs font-bold text-indigo-600 tabular-nums">
+                    {evaluation.rubric_total}/100
+                  </span>
+                )}
+              </div>
+              <div className="p-5 space-y-4">
+                {/* Dimension bars */}
+                <div>
+                  {Object.entries(evaluation.rubric_scores).map(([dim, score]) => (
+                    <RubricBar key={dim} dimension={dim} score={score} />
+                  ))}
+                </div>
+
+                {/* Evidence keywords matched */}
+                {evaluation.evidence && evaluation.evidence.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                      Keywords Detected
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {evaluation.evidence.map((ev, i) => (
+                        <span
+                          key={i}
+                          className="text-[10px] px-2 py-0.5 bg-green-50 border border-green-200 rounded-full text-green-700"
+                        >
+                          {ev}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Improvement hint */}
+                {evaluation.improvement_hint && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                    <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-1">
+                      How to Improve
+                    </p>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      {evaluation.improvement_hint}
+                    </p>
+                  </div>
+                )}
+
+                {/* Interviewer diagnosis */}
+                {evaluation.interviewer_diagnosis && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                      Interviewer View
+                    </p>
+                    <p className="text-xs text-gray-700 leading-relaxed italic">
+                      {evaluation.interviewer_diagnosis}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -514,21 +646,46 @@ export default function InterviewRoom() {
             disabled={isEvaluating}
           />
 
-          <SidebarCard title="Session">
-            <InfoRow label="Role"     value={session.selected_role} />
-            <InfoRow label="Status"   value={
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                Active
-              </span>
-            } />
-            <InfoRow label="Progress" value={`${questionNumber} / ${maxQuestions}`} />
-            <InfoRow label="Evaluation" value={
-              isDone
-                ? <span className="text-green-600 font-medium">Complete</span>
-                : <span className="text-gray-400">Pending</span>
-            } />
-          </SidebarCard>
+          {/* Phase 11: Candidate state panel (skill mastery + profile) */}
+          {candidateState ? (
+            <CandidateStatePanel candidateState={candidateState} />
+          ) : (
+            <SidebarCard title="Session">
+              <InfoRow label="Role"     value={session.selected_role} />
+              <InfoRow label="Status"   value={
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  Active
+                </span>
+              } />
+              <InfoRow label="Progress" value={`${questionNumber} / ${maxQuestions}`} />
+              <InfoRow label="Evaluation" value={
+                isDone
+                  ? <span className="text-green-600 font-medium">Complete</span>
+                  : <span className="text-gray-400">Pending</span>
+              } />
+            </SidebarCard>
+          )}
+
+          {/* Progress row when candidateState is showing */}
+          {candidateState && (
+            <SidebarCard title="Progress">
+              <InfoRow label="Role"     value={session.selected_role} />
+              <InfoRow label="Question" value={`${questionNumber} / ${maxQuestions}`} />
+              {candidateState.inferred_level && (
+                <InfoRow label="Level" value={
+                  <span className="capitalize px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-semibold border border-indigo-100">
+                    {candidateState.inferred_level}
+                  </span>
+                } />
+              )}
+              <InfoRow label="Evaluation" value={
+                isDone
+                  ? <span className="text-green-600 font-medium">Complete</span>
+                  : <span className="text-gray-400">Pending</span>
+              } />
+            </SidebarCard>
+          )}
 
           {/* Score summary for current question */}
           {isDone && evaluation && (

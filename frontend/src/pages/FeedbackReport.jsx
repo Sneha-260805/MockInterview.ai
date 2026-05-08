@@ -8,6 +8,7 @@ import {
 
 import ScoreCard    from "../components/ScoreCard";
 import ReportSection from "../components/ReportSection";
+import SkillMasteryMap from "../components/SkillMasteryMap";
 import { generateFinalReport } from "../services/interviewService";
 
 // ── Colour helpers ─────────────────────────────────────────────────────────────
@@ -20,6 +21,31 @@ const priorityStyles = {
 function scoreColor(s) {
   return s >= 70 ? "text-green-600" : s >= 50 ? "text-yellow-500" : "text-orange-500";
 }
+
+// ── Readiness level config ─────────────────────────────────────────────────────
+const READINESS_CONFIG = {
+  ready: {
+    label: "Interview Ready",
+    color: "bg-green-50 border-green-200 text-green-700",
+    dot:   "bg-green-500",
+    icon:  "M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+    desc:  "You demonstrated strong command of the core concepts and communicated clearly.",
+  },
+  almost_ready: {
+    label: "Almost Ready",
+    color: "bg-yellow-50 border-yellow-200 text-yellow-700",
+    dot:   "bg-yellow-500",
+    icon:  "M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z",
+    desc:  "Good foundation — a focused week of practice on your growth areas will get you over the line.",
+  },
+  needs_practice: {
+    label: "Needs Practice",
+    color: "bg-red-50 border-red-200 text-red-700",
+    dot:   "bg-red-500",
+    icon:  "M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z",
+    desc:  "Keep practising — review the 7-day plan below and focus on the identified gaps.",
+  },
+};
 
 // ── Custom Recharts tooltip ───────────────────────────────────────────────────
 function CustomTooltip({ active, payload, label }) {
@@ -64,6 +90,18 @@ const IconChat = () => (
 const IconList = () => (
   <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+  </svg>
+);
+const IconBrain = () => (
+  <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round"
+      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+  </svg>
+);
+const IconCalendar = () => (
+  <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round"
+      d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z" />
   </svg>
 );
 
@@ -131,6 +169,11 @@ export default function FeedbackReport() {
 
   const overallColor = scoreColor(report.overall_score);
 
+  // Phase 11: readiness config
+  const readiness = report.readiness_level
+    ? (READINESS_CONFIG[report.readiness_level] || READINESS_CONFIG.almost_ready)
+    : null;
+
   // ── Report ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 pb-16">
@@ -140,6 +183,15 @@ export default function FeedbackReport() {
           <span className="text-sm font-semibold text-gray-800">Final Report</span>
           <span className="text-gray-300">·</span>
           <span className="text-xs text-gray-500">{report.selected_role}</span>
+          {readiness && (
+            <>
+              <span className="text-gray-300">·</span>
+              <span className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${readiness.color}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${readiness.dot}`} />
+                {readiness.label}
+              </span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -202,6 +254,38 @@ export default function FeedbackReport() {
           </div>
         </div>
 
+        {/* ── Phase 11: Readiness banner ────────────────────────────────────── */}
+        {readiness && (
+          <div className={`flex items-start gap-4 border rounded-2xl px-6 py-5 ${readiness.color}`}>
+            <div className="shrink-0 w-10 h-10 rounded-full bg-white/60 flex items-center justify-center">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d={readiness.icon} />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-base">{readiness.label}</p>
+              <p className="text-sm opacity-80 mt-0.5 leading-relaxed">{readiness.desc}</p>
+            </div>
+            {/* Best-fit roles */}
+            {report.best_fit_roles?.length > 0 && (
+              <div className="shrink-0 text-right hidden sm:block">
+                <p className="text-[10px] font-semibold uppercase tracking-wide opacity-60 mb-1.5">Best-fit Roles</p>
+                <div className="flex flex-col gap-1 items-end">
+                  {report.best_fit_roles.slice(0, 3).map((role, i) => (
+                    <span
+                      key={i}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-white/50 font-semibold truncate max-w-[160px]"
+                      title={role}
+                    >
+                      {role}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Behavioral mode banner ────────────────────────────────────────── */}
         {report.behavioral_mode === "placeholder" && (
           <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5">
@@ -211,9 +295,8 @@ export default function FeedbackReport() {
             </svg>
             <p className="text-xs text-amber-800 leading-relaxed">
               <span className="font-semibold">Behavioral scores are estimated.</span>{" "}
-              Communication, Confidence, and Engagement are computed from answer heuristics
-              (word count, score trajectory, session length). Use the audio recorder in the
-              interview room to get real audio-derived scores.
+              Communication, Confidence, and Engagement are computed from answer heuristics.
+              Use the audio recorder in the interview room to get real audio-derived scores.
             </p>
           </div>
         )}
@@ -237,8 +320,7 @@ export default function FeedbackReport() {
             </svg>
             <p className="text-xs text-green-800 leading-relaxed">
               <span className="font-semibold">Whisper audio analysis active.</span>{" "}
-              Communication and Confidence derived from real transcription — pause detection,
-              pace, and word count replace heuristic placeholders.
+              Communication and Confidence derived from real transcription.
             </p>
           </div>
         )}
@@ -262,8 +344,7 @@ export default function FeedbackReport() {
             </svg>
             <p className="text-xs text-green-800 leading-relaxed">
               <span className="font-semibold">Computer-vision analysis active.</span>{" "}
-              Engagement, eye contact, posture, and stress derived from real face
-              detection on your video captures.
+              Engagement, eye contact, posture, and stress derived from real face detection.
             </p>
           </div>
         )}
@@ -275,8 +356,7 @@ export default function FeedbackReport() {
             </svg>
             <p className="text-xs text-indigo-800 leading-relaxed">
               <span className="font-semibold">Full multimodal analysis.</span>{" "}
-              Audio (Communication, Confidence) and Video (Engagement) scores are derived
-              from your recordings — all five behavioral axes use real data.
+              Audio and Video scores are derived from your recordings — all behavioral axes use real data.
             </p>
           </div>
         )}
@@ -288,44 +368,26 @@ export default function FeedbackReport() {
           const hasVideo      = ["video", "video_fallback", "multimodal"].includes(bm);
           const audioReal     = ["audio",  "multimodal"].includes(bm);
           const videoReal     = ["video",  "multimodal"].includes(bm);
-          const isPlaceholder = bm === "placeholder";
           return (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-              <ScoreCard
-                label="Technical"
-                score={report.technical_score}
-                subtitle="avg of all answers"
-              />
-              <ScoreCard
-                label="Communication"
-                score={report.communication_score}
-                subtitle={hasAudio ? (audioReal ? "Whisper clarity" : "audio heuristic") : "word-count proxy"}
-                isPlaceholder={!audioReal}
-              />
-              <ScoreCard
-                label="Confidence"
-                score={report.confidence_score}
-                subtitle={hasAudio ? (audioReal ? "Whisper fluency" : "audio heuristic") : "score trajectory"}
-                isPlaceholder={!audioReal}
-              />
-              <ScoreCard
-                label="Engagement"
-                score={report.engagement_score}
-                subtitle={hasVideo ? (videoReal ? "face detection" : "video heuristic") : "session length"}
-                isPlaceholder={!videoReal}
-              />
-              <ScoreCard
-                label="Role Fit"
-                score={report.role_fit_score}
-                subtitle="resume match"
-              />
+              <ScoreCard label="Technical"    score={report.technical_score}    subtitle="avg of all answers" />
+              <ScoreCard label="Communication" score={report.communication_score} subtitle={hasAudio ? (audioReal ? "Whisper clarity" : "audio heuristic") : "word-count proxy"} isPlaceholder={!audioReal} />
+              <ScoreCard label="Confidence"   score={report.confidence_score}   subtitle={hasAudio ? (audioReal ? "Whisper fluency" : "audio heuristic") : "score trajectory"} isPlaceholder={!audioReal} />
+              <ScoreCard label="Engagement"   score={report.engagement_score}   subtitle={hasVideo ? (videoReal ? "face detection" : "video heuristic") : "session length"} isPlaceholder={!videoReal} />
+              <ScoreCard label="Role Fit"     score={report.role_fit_score}     subtitle="resume match" />
             </div>
           );
         })()}
 
+        {/* ── Phase 11: Skill Mastery Map ───────────────────────────────────── */}
+        {report.skill_mastery_summary && Object.keys(report.skill_mastery_summary).length > 0 && (
+          <SkillMasteryMap
+            skillMastery={report.skill_mastery_summary}
+          />
+        )}
+
         {/* ── Charts ───────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
           {/* Radar */}
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
@@ -334,24 +396,12 @@ export default function FeedbackReport() {
             <ResponsiveContainer width="100%" height={260}>
               <RadarChart data={radarData} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
                 <PolarGrid stroke="#e5e7eb" />
-                <PolarAngleAxis
-                  dataKey="subject"
-                  tick={{ fill: "#6b7280", fontSize: 11, fontWeight: 500 }}
-                />
-                <PolarRadiusAxis
-                  angle={90}
-                  domain={[0, 100]}
-                  tick={{ fill: "#9ca3af", fontSize: 9 }}
-                  tickCount={5}
-                />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: "#6b7280", fontSize: 11, fontWeight: 500 }} />
+                <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: "#9ca3af", fontSize: 9 }} tickCount={5} />
                 <Radar
-                  name="Score"
-                  dataKey="score"
-                  stroke="#6366f1"
-                  fill="#6366f1"
-                  fillOpacity={0.18}
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: "#6366f1" }}
+                  name="Score" dataKey="score"
+                  stroke="#6366f1" fill="#6366f1" fillOpacity={0.18}
+                  strokeWidth={2} dot={{ r: 3, fill: "#6366f1" }}
                 />
               </RadarChart>
             </ResponsiveContainer>
@@ -363,20 +413,12 @@ export default function FeedbackReport() {
               Score Breakdown Per Question
             </p>
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart
-                data={barData}
-                margin={{ top: 5, right: 10, left: -20, bottom: 5 }}
-                barCategoryGap="28%"
-              >
+              <BarChart data={barData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }} barCategoryGap="28%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="name" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis domain={[0, 100]} tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend
-                  wrapperStyle={{ fontSize: 11, paddingTop: 10 }}
-                  iconType="circle"
-                  iconSize={8}
-                />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} iconType="circle" iconSize={8} />
                 <Bar dataKey="Technical"   fill="#6366f1" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Depth"       fill="#a78bfa" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Correctness" fill="#c4b5fd" radius={[4, 4, 0, 0]} />
@@ -385,12 +427,25 @@ export default function FeedbackReport() {
           </div>
         </div>
 
-        {/* ── Strengths ─────────────────────────────────────────────────────── */}
-        {report.strengths.length > 0 && (
-          <ReportSection
-            title="Strengths"
-            icon={<IconStar />}
-          >
+        {/* ── Phase 11: Top strengths with evidence ─────────────────────────── */}
+        {report.top_3_strengths_with_evidence?.length > 0 && (
+          <ReportSection title="Top Strengths (with Evidence)" icon={<IconStar />}>
+            <ul className="space-y-3">
+              {report.top_3_strengths_with_evidence.map((s, i) => (
+                <li key={i} className="flex items-start gap-3 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
+                  <svg className="w-4 h-4 text-green-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                  <span className="text-sm text-green-800 leading-relaxed">{s}</span>
+                </li>
+              ))}
+            </ul>
+          </ReportSection>
+        )}
+
+        {/* ── Strengths (existing, show if no Phase 11 version) ─────────────── */}
+        {!report.top_3_strengths_with_evidence?.length && report.strengths.length > 0 && (
+          <ReportSection title="Strengths" icon={<IconStar />}>
             <ul className="space-y-2.5">
               {report.strengths.map((s, i) => (
                 <li key={i} className="flex items-start gap-3">
@@ -404,12 +459,25 @@ export default function FeedbackReport() {
           </ReportSection>
         )}
 
-        {/* ── Improvement areas ─────────────────────────────────────────────── */}
-        {report.improvement_areas.length > 0 && (
-          <ReportSection
-            title="Areas to Improve"
-            icon={<IconTarget />}
-          >
+        {/* ── Phase 11: Top gaps with evidence ──────────────────────────────── */}
+        {report.top_3_gaps_with_evidence?.length > 0 && (
+          <ReportSection title="Key Gaps (with Evidence)" icon={<IconTarget />}>
+            <ul className="space-y-3">
+              {report.top_3_gaps_with_evidence.map((gap, i) => (
+                <li key={i} className="flex items-start gap-3 bg-orange-50 border border-orange-100 rounded-xl px-4 py-3">
+                  <svg className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm text-orange-800 leading-relaxed">{gap}</span>
+                </li>
+              ))}
+            </ul>
+          </ReportSection>
+        )}
+
+        {/* ── Improvement areas (existing, show if no Phase 11 version) ─────── */}
+        {!report.top_3_gaps_with_evidence?.length && report.improvement_areas.length > 0 && (
+          <ReportSection title="Areas to Improve" icon={<IconTarget />}>
             <ul className="space-y-2.5">
               {report.improvement_areas.map((area, i) => (
                 <li key={i} className="flex items-start gap-3">
@@ -423,34 +491,60 @@ export default function FeedbackReport() {
           </ReportSection>
         )}
 
-        {/* ── Learning plan ─────────────────────────────────────────────────── */}
-        {report.recommended_learning_plan.length > 0 && (
-          <ReportSection
-            title="Personalised Learning Plan"
-            icon={<IconBook />}
-          >
-            <div className="space-y-4">
-              {report.recommended_learning_plan.map((item, i) => (
+        {/* ── Phase 11: Agent adaptation summary ───────────────────────────── */}
+        {report.adaptation_summary?.length > 0 && (
+          <ReportSection title="How the AI Adapted to You" icon={<IconBrain />}>
+            <div className="relative">
+              {/* Timeline line */}
+              <div className="absolute left-3.5 top-3 bottom-3 w-px bg-indigo-100" />
+              <div className="space-y-4">
+                {report.adaptation_summary.map((step, i) => (
+                  <div key={i} className="relative flex gap-4 items-start">
+                    <div className="relative z-10 w-7 h-7 rounded-full bg-indigo-100 border-2 border-indigo-200 flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-indigo-600">
+                      {i + 1}
+                    </div>
+                    <div className="flex-1 pt-1 pb-1">
+                      <p className="text-sm text-gray-700 leading-relaxed">{step}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </ReportSection>
+        )}
+
+        {/* ── Phase 11: 7-day practice plan ────────────────────────────────── */}
+        {report.recommended_7_day_plan?.length > 0 && (
+          <ReportSection title="7-Day Practice Plan" icon={<IconCalendar />}>
+            <div className="space-y-2">
+              {report.recommended_7_day_plan.map((task, i) => (
                 <div
                   key={i}
-                  className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100"
+                  className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-indigo-50 hover:border-indigo-100 transition-colors"
                 >
-                  {/* Priority badge */}
+                  <div className="shrink-0 w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600">
+                    D{i + 1}
+                  </div>
+                  <p className="text-sm text-gray-700 leading-relaxed pt-1">{task}</p>
+                </div>
+              ))}
+            </div>
+          </ReportSection>
+        )}
+
+        {/* ── Learning plan (existing) ──────────────────────────────────────── */}
+        {report.recommended_learning_plan.length > 0 && (
+          <ReportSection title="Personalised Learning Resources" icon={<IconBook />}>
+            <div className="space-y-4">
+              {report.recommended_learning_plan.map((item, i) => (
+                <div key={i} className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
                   <div className="shrink-0 pt-0.5">
-                    <span
-                      className={`inline-block text-[10px] font-semibold px-2 py-1 rounded-full border uppercase tracking-wide ${
-                        priorityStyles[item.priority] ?? priorityStyles.medium
-                      }`}
-                    >
+                    <span className={`inline-block text-[10px] font-semibold px-2 py-1 rounded-full border uppercase tracking-wide ${priorityStyles[item.priority] ?? priorityStyles.medium}`}>
                       {item.priority}
                     </span>
                   </div>
-
-                  {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">
-                      {item.topic}
-                    </p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0.5">{item.topic}</p>
                     <p className="text-sm font-medium text-gray-800 mb-1">{item.resource}</p>
                     <p className="text-xs text-gray-500 leading-relaxed">{item.reason}</p>
                   </div>
@@ -461,20 +555,14 @@ export default function FeedbackReport() {
         )}
 
         {/* ── Final feedback ─────────────────────────────────────────────────── */}
-        <ReportSection
-          title="Interviewer Feedback"
-          icon={<IconChat />}
-        >
+        <ReportSection title="Interviewer Feedback" icon={<IconChat />}>
           <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
             {report.final_feedback}
           </p>
         </ReportSection>
 
         {/* ── Per-question breakdown ──────────────────────────────────────── */}
-        <ReportSection
-          title="Question-by-Question Breakdown"
-          icon={<IconList />}
-        >
+        <ReportSection title="Question-by-Question Breakdown" icon={<IconList />}>
           <div className="space-y-5">
             {report.answer_summaries.map((s) => {
               const avg = Math.round((s.technical_score + s.depth_score + s.correctness_score) / 3);
@@ -548,7 +636,7 @@ export default function FeedbackReport() {
                           ].map(({ label, val, isScore }) => (
                             <div key={label}>
                               <p className={`text-sm font-bold tabular-nums ${isScore ? scoreColor(val) : "text-gray-700"}`}>
-                                {val}{isScore ? "" : ""}
+                                {val}
                               </p>
                               <p className="text-[10px] text-gray-400">{label}</p>
                             </div>
@@ -578,10 +666,9 @@ export default function FeedbackReport() {
                             { label: "Eye Contact", val: s.video_eye_contact, isScore: true },
                             { label: "Posture",     val: s.video_posture,     isScore: true },
                             { label: "Stress",      val: s.video_stress
-                                ? (s.video_stress === "low" ? "Calm"
-                                  : s.video_stress === "medium" ? "Moderate"
-                                  : "Elevated")
-                                : "—",                                         isScore: false },
+                                ? (s.video_stress === "low" ? "Calm" : s.video_stress === "medium" ? "Moderate" : "Elevated")
+                                : "—",
+                              isScore: false },
                           ].map(({ label, val, isScore }) => (
                             <div key={label}>
                               <p className={`text-sm font-bold tabular-nums

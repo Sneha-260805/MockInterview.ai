@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 
@@ -12,12 +12,19 @@ class Question(BaseModel):
 
 
 class EvaluationResult(BaseModel):
+    # ── Core scores (original — never removed) ────────────────────────────────
     technical_score: int
     depth_score: int
     correctness_score: int
     covered_points: List[str]
     missing_points: List[str]
     feedback: str
+    # ── Phase 11: Rubric-based additions (optional — backward compatible) ──────
+    rubric_scores: Optional[Dict[str, int]] = None   # dimension -> 0-30/25/20/15/10
+    rubric_total: Optional[int] = None               # 0-100
+    evidence: Optional[List[str]] = None             # matched concepts
+    improvement_hint: Optional[str] = None           # targeted coaching tip
+    interviewer_diagnosis: Optional[str] = None      # 1-sentence diagnosis
 
 
 class AnswerRecord(BaseModel):
@@ -52,6 +59,11 @@ class StartInterviewResponse(BaseModel):
     candidate_id: str
     selected_role: str
     first_question: Question
+    # Phase 11 additions (optional — backward compatible)
+    interview_plan: Optional[List[Any]] = None    # List[InterviewPlanItem] serialised
+    agent_summary: Optional[str] = None
+    candidate_state: Optional[Any] = None         # CandidateState serialised
+    inferred_level: Optional[str] = None
 
 
 class EvaluateAnswerRequest(BaseModel):
@@ -60,6 +72,7 @@ class EvaluateAnswerRequest(BaseModel):
     question: str
     answer: str
     expected_points: List[str]
+    topic: Optional[str] = None   # Phase 11: for rubric selection
 
 
 class NextQuestionRequest(BaseModel):
@@ -75,6 +88,9 @@ class NextQuestionResponse(BaseModel):
     session_complete: bool = False
     questions_answered: int = 0
     max_questions: int = 5
+    # Phase 11 additions (optional — backward compatible)
+    decision_trace: Optional[Any] = None          # AgentDecisionTrace serialised
+    candidate_state: Optional[Any] = None         # updated CandidateState serialised
 
 
 # ── Phase 6: Final Report models ──────────────────────────────────────────────
@@ -138,3 +154,13 @@ class FinalReport(BaseModel):
 
     # ── Per-question breakdown ────────────────────────────────────────────────
     answer_summaries: List[AnswerSummary]
+
+    # ── Phase 11: Diagnostic coaching section (optional — backward compatible) ─
+    readiness_level: Optional[str] = None          # "ready" | "almost_ready" | "needs_practice"
+    best_fit_roles: Optional[List[str]] = None
+    weaker_role_risks: Optional[List[str]] = None
+    skill_mastery_summary: Optional[Dict[str, int]] = None
+    top_3_strengths_with_evidence: Optional[List[str]] = None
+    top_3_gaps_with_evidence: Optional[List[str]] = None
+    recommended_7_day_plan: Optional[List[str]] = None
+    adaptation_summary: Optional[List[str]] = None

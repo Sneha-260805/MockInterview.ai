@@ -482,6 +482,200 @@ async def _llm_feedback(
     return None
 
 
+# ── Phase 11: Diagnostic builder ─────────────────────────────────────────────
+
+_ALL_ROLES = [
+    "Full Stack Developer", "Frontend Developer", "Backend Developer",
+    "Data Scientist", "ML / AI Engineer", "DevOps / Cloud Engineer",
+    "Mobile Developer", "Data Engineer",
+]
+
+_ROLE_CORE_SKILLS: dict[str, list[str]] = {
+    "Full Stack Developer":    ["REST APIs", "Database Design", "Authentication", "React", "System Design"],
+    "Frontend Developer":      ["React", "CSS", "State Management", "Performance", "Accessibility"],
+    "Backend Developer":       ["API Design", "Database", "Security", "Concurrency", "System Design"],
+    "Data Scientist":          ["Machine Learning", "Statistics", "Python", "Model Evaluation", "Data Analysis"],
+    "ML / AI Engineer":        ["Deep Learning", "MLOps", "Model Serving", "Python", "Transformers"],
+    "DevOps / Cloud Engineer": ["Kubernetes", "Docker", "CI/CD", "Cloud Architecture", "Observability"],
+    "Mobile Developer":        ["React Native", "iOS/Android APIs", "Performance", "Offline Architecture"],
+    "Data Engineer":           ["Pipelines", "Spark", "Kafka", "Data Quality", "Data Modelling"],
+}
+
+
+def _build_diagnostic(
+    session_data: dict,
+    answers: list[dict],
+    overall: int,
+    tech: int,
+    role: str,
+    role_fit: int,
+    strengths: list[str],
+    improvements: list[str],
+    analysis,
+) -> dict:
+    """Build the Phase 11 diagnostic coaching section."""
+
+    # ── Readiness level ───────────────────────────────────────────────────────
+    if overall >= 72 and tech >= 68 and role_fit >= 70:
+        readiness_level = "ready"
+    elif overall >= 58 or tech >= 55:
+        readiness_level = "almost_ready"
+    else:
+        readiness_level = "needs_practice"
+
+    # ── Best fit roles ────────────────────────────────────────────────────────
+    resume_skills: set[str] = set()
+    if analysis:
+        for s in getattr(analysis, "skills", []):
+            resume_skills.add(s.lower())
+
+    best_fit: list[str] = []
+    for r in _ALL_ROLES:
+        core = _ROLE_CORE_SKILLS.get(r, [])
+        overlap = sum(
+            1 for c in core
+            if any(c.lower() in rs or rs in c.lower() for rs in resume_skills)
+        )
+        if overlap >= 2:
+            best_fit.append(r)
+    if not best_fit:
+        best_fit = [role]
+    # Put the selected role first
+    if role in best_fit:
+        best_fit = [role] + [r for r in best_fit if r != role]
+    best_fit = best_fit[:3]
+
+    # ── Weaker role risks ─────────────────────────────────────────────────────
+    weak_areas = getattr(analysis, "weak_areas", []) if analysis else []
+    weaker_risks: list[str] = []
+    for wa in weak_areas[:3]:
+        weaker_risks.append(
+            f"Limited depth in '{wa}' may affect performance in roles requiring it"
+        )
+    if tech < 55:
+        weaker_risks.append(
+            "Technical score below threshold for senior-level positions without further study"
+        )
+
+    # ── Skill mastery summary from candidate state ────────────────────────────
+    raw_state = session_data.get("candidate_state")
+    skill_mastery_summary: dict[str, int] = {}
+    if raw_state:
+        skill_mastery_summary = raw_state.get("skill_mastery", {})
+    if not skill_mastery_summary:
+        # Build from answer evaluations
+        questions = session_data.get("questions_asked", [])
+        q_by_id = {q["question_id"]: q for q in questions}
+        for a in answers:
+            matched_q = q_by_id.get(a.get("question_id", ""))
+            if matched_q:
+                t = matched_q.get("topic", "")
+                if t:
+                    skill_mastery_summary[t] = a["evaluation"]["technical_score"]
+
+    # ── Top 3 strengths with evidence ─────────────────────────────────────────
+    top_strengths_ev: list[str] = []
+    for a in answers:
+        covered = a["evaluation"].get("covered_points", [])
+        tech_s = a["evaluation"]["technical_score"]
+        if tech_s >= 65 and covered:
+            ev = covered[0]
+            top_strengths_ev.append(f"Demonstrated '{ev}' with a score of {tech_s}/100")
+        if len(top_strengths_ev) >= 3:
+            break
+    if not top_strengths_ev and strengths:
+        top_strengths_ev = [f"Resume strength: {s}" for s in strengths[:3]]
+
+    # ── Top 3 gaps with evidence ──────────────────────────────────────────────
+    top_gaps_ev: list[str] = []
+    freq: dict[str, int] = {}
+    raw_missing: dict[str, str] = {}
+    for a in answers:
+        for pt in a["evaluation"].get("missing_points", []):
+            k = pt.lower()[:50]
+            freq[k] = freq.get(k, 0) + 1
+            raw_missing.setdefault(k, pt)
+    for k in sorted(freq, key=lambda x: -freq[x])[:3]:
+        top_gaps_ev.append(
+            f"Missed '{raw_missing[k]}'"
+            + (f" (appeared in {freq[k]} answer{'s' if freq[k] > 1 else ''})" if freq[k] > 1 else "")
+        )
+    if not top_gaps_ev and improvements:
+        top_gaps_ev = [f"Area to improve: {imp}" for imp in improvements[:3]]
+
+    # ── 7-day practice plan ───────────────────────────────────────────────────
+    weak_topics = [t for t, v in skill_mastery_summary.items() if v < 55][:3]
+    plan_7_day: list[str] = [
+        f"Day 1-2: Review core concepts for '{weak_topics[0]}' — focus on definitions and examples"
+        if weak_topics else
+        f"Day 1-2: Revisit {role} fundamentals using the recommended learning resources",
+
+        f"Day 3-4: Build or extend a project that demonstrates "
+        f"{'and '.join(weak_topics[:2]) if weak_topics else 'core skills from this session'}",
+
+        "Day 5: Practice explaining your projects out loud — use the STAR method (Situation, Task, Action, Result)",
+
+        "Day 6: Run 2 timed mock questions (15 min each) using the question banks linked below",
+
+        "Day 7: Record yourself answering one hard question — review audio/video for confidence and clarity",
+    ]
+    # Add specific topic hint if available
+    if len(weak_topics) >= 2:
+        plan_7_day.insert(1,
+            f"Day 2 (bonus): Watch one focused tutorial on '{weak_topics[1]}' — "
+            "aim to be able to explain it in 90 seconds without notes"
+        )
+        plan_7_day = plan_7_day[:7]
+
+    # ── Adaptation summary ────────────────────────────────────────────────────
+    adaptation_log = session_data.get("adaptation_log", [])
+    decision_traces = session_data.get("decision_traces", [])
+    adaptation_summary: list[str] = []
+
+    if decision_traces:
+        for trace in decision_traces[:4]:
+            dt = trace.get("decision_type", "")
+            prev = trace.get("previous_topic", "")
+            score = trace.get("previous_score", 0)
+            next_t = trace.get("next_topic", "")
+            if dt == "increase_difficulty":
+                adaptation_summary.append(
+                    f"After strong performance on '{prev}' ({score}/100), difficulty increased for '{next_t}'"
+                )
+            elif dt == "strengthen_fundamentals":
+                adaptation_summary.append(
+                    f"Score of {score}/100 on '{prev}' triggered a return to foundational concepts in '{next_t}'"
+                )
+            elif dt == "remediation":
+                adaptation_summary.append(
+                    f"Repeated weakness on '{prev}' → remediation probe on '{next_t}'"
+                )
+            elif dt == "deeper_follow_up":
+                adaptation_summary.append(
+                    f"Solid answer on '{prev}' ({score}/100) → follow-up depth probe in '{next_t}'"
+                )
+            elif dt == "confidence_recovery":
+                adaptation_summary.append(
+                    f"Confidence recovery triggered after '{prev}' — easier entry point on '{next_t}'"
+                )
+    elif adaptation_log:
+        adaptation_summary = [f"Q{i+2}: {r}" for i, r in enumerate(adaptation_log[:4])]
+
+    if not adaptation_summary:
+        adaptation_summary = ["Session used standard difficulty progression — no significant adaptation triggered"]
+
+    return {
+        "readiness_level": readiness_level,
+        "best_fit_roles": best_fit,
+        "weaker_role_risks": weaker_risks,
+        "skill_mastery_summary": skill_mastery_summary,
+        "top_3_strengths_with_evidence": top_strengths_ev,
+        "top_3_gaps_with_evidence": top_gaps_ev,
+        "recommended_7_day_plan": plan_7_day,
+        "adaptation_summary": adaptation_summary,
+    }
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 async def generate_report(
@@ -613,6 +807,19 @@ async def generate_report(
         else ""
     ) or "Candidate"
 
+    # ── Phase 11: Diagnostic coaching section ─────────────────────────────────
+    diagnostic = _build_diagnostic(
+        session_data=session_data,
+        answers=answers,
+        overall=overall,
+        tech=tech,
+        role=role,
+        role_fit=role_fit,
+        strengths=strengths,
+        improvements=improvements,
+        analysis=analysis,
+    )
+
     return FinalReport(
         session_id=session_data.get("session_id", ""),
         candidate_id=candidate_id,
@@ -631,4 +838,5 @@ async def generate_report(
         recommended_learning_plan=learning_plan,
         final_feedback=final_feedback,
         answer_summaries=answer_summaries,
+        **diagnostic,
     )
