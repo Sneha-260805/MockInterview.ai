@@ -22,10 +22,16 @@ google-generativeai>=0.8.3 # Gemini  — set LLM_PROVIDER=gemini + GEMINI_API_KE
 
 # ── Audio transcription (optional) ───────────────────────────────────
 # Uncomment ONE of the following to enable real Whisper transcription.
-# Without either, audio scoring uses a reproducible file-size heuristic.
+# Without either, audio scoring uses a conservative file-size heuristic (max score 55).
 #
 # faster-whisper            # recommended: CTranslate2-based, faster + lower memory
 # openai-whisper            # alternative: original OpenAI implementation
+faster-whisper
+librosa
+soundfile
+ffmpeg-python
+# Uncomment to enable lightweight pitch stability analysis (no ML, signal processing only).
+# librosa                   # pip install librosa — enables pitch variability detection
 
 # ── Video analysis (optional) ─────────────────────────────────────────
 # Uncomment to enable real face detection via OpenCV + MediaPipe.

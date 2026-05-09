@@ -43,6 +43,18 @@ function rateColor(rate) {
 function rateLabel(rate) {
   return rate === "fast" ? "Fast" : rate === "slow" ? "Slow" : "Medium";
 }
+function hesitationColor(level) {
+  return level === "low" ? "text-green-600" : level === "high" ? "text-red-500" : "text-yellow-500";
+}
+function pitchLabel(stability) {
+  if (stability === "stable")   return "Stable";
+  if (stability === "variable") return "Variable";
+  if (stability === "monotone") return "Monotone";
+  return null;
+}
+function pitchColor(stability) {
+  return stability === "stable" ? "text-green-600" : stability === "variable" ? "text-orange-500" : "text-blue-500";
+}
 
 function ScorePill({ label, score, color }) {
   return (
@@ -294,66 +306,135 @@ export default function AudioRecorder({
           {recState === RS.done && result && (
             <div className="space-y-4">
 
-              {/* Mode badge */}
-              <div className="flex items-center gap-2">
+              {/* Invalid audio warning */}
+              {result.status === "invalid_audio" && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                  <svg className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    Unable to reliably analyse communication due to insufficient audio quality.
+                    {result.reason ? ` ${result.reason}` : ""} Please re-record with clearer speech.
+                  </p>
+                </div>
+              )}
+
+              {/* Mode badge + metadata */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-[10px] font-semibold px-2 py-1 rounded-full border uppercase tracking-wide
                   ${result.mode === "fallback"
                     ? "bg-amber-50 text-amber-700 border-amber-200"
+                    : result.status === "invalid_audio"
+                    ? "bg-red-50 text-red-600 border-red-200"
                     : "bg-green-50 text-green-700 border-green-200"}`}
                 >
-                  {result.mode === "fallback" ? "Heuristic mode" : "Whisper transcription"}
+                  {result.mode === "fallback"
+                    ? "Heuristic mode"
+                    : result.status === "invalid_audio"
+                    ? "Insufficient audio"
+                    : "Whisper transcription"}
                 </span>
                 {result.duration_seconds && (
                   <span className="text-xs text-gray-400">
                     {result.duration_seconds}s · {result.word_count ?? "?"} words
+                    {result.words_per_minute ? ` · ${Math.round(result.words_per_minute)} wpm` : ""}
                   </span>
                 )}
               </div>
 
-              {/* Score pills */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <ScorePill
-                  label="Confidence"
-                  score={result.confidence_score}
-                  color={scoreColor(result.confidence_score)}
-                />
-                <ScorePill
-                  label="Clarity"
-                  score={result.communication_clarity_score}
-                  color={scoreColor(result.communication_clarity_score)}
-                />
-                <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[64px]">
-                  <span className={`text-sm font-bold leading-none ${rateColor(result.speaking_rate)}`}>
-                    {rateLabel(result.speaking_rate)}
-                  </span>
-                  <span className="text-[10px] text-gray-400 mt-0.5">Pace</span>
+              {/* Score pills — only shown for valid audio */}
+              {result.status !== "invalid_audio" && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <ScorePill
+                    label="Confidence"
+                    score={result.confidence_score}
+                    color={scoreColor(result.confidence_score)}
+                  />
+                  <ScorePill
+                    label="Clarity"
+                    score={result.communication_clarity_score}
+                    color={scoreColor(result.communication_clarity_score)}
+                  />
+                  {/* Pace */}
+                  <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[64px]">
+                    <span className={`text-sm font-bold leading-none ${rateColor(result.speaking_rate)}`}>
+                      {rateLabel(result.speaking_rate)}
+                    </span>
+                    <span className="text-[10px] text-gray-400 mt-0.5">Pace</span>
+                  </div>
+                  {/* Pauses */}
+                  <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[64px]">
+                    <span className="text-lg font-extrabold tabular-nums leading-none text-gray-700">
+                      {result.pause_count}
+                    </span>
+                    <span className="text-[10px] text-gray-400 mt-0.5">Pauses</span>
+                  </div>
+                  {/* Filler words */}
+                  {result.filler_word_count != null && result.mode !== "fallback" && (
+                    <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[64px]">
+                      <span className={`text-lg font-extrabold tabular-nums leading-none
+                        ${result.filler_ratio > 0.10 ? "text-red-500" : result.filler_ratio > 0.05 ? "text-yellow-500" : "text-green-600"}`}>
+                        {result.filler_word_count}
+                      </span>
+                      <span className="text-[10px] text-gray-400 mt-0.5">Fillers</span>
+                    </div>
+                  )}
+                  {/* Hesitation level */}
+                  {result.hesitation_level && result.mode !== "fallback" && (
+                    <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[64px]">
+                      <span className={`text-sm font-bold leading-none capitalize ${hesitationColor(result.hesitation_level)}`}>
+                        {result.hesitation_level.charAt(0).toUpperCase() + result.hesitation_level.slice(1)}
+                      </span>
+                      <span className="text-[10px] text-gray-400 mt-0.5">Hesitation</span>
+                    </div>
+                  )}
+                  {/* Pitch stability */}
+                  {result.pitch_stability && result.pitch_stability !== "unavailable" && (
+                    <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[64px]">
+                      <span className={`text-sm font-bold leading-none ${pitchColor(result.pitch_stability)}`}>
+                        {pitchLabel(result.pitch_stability)}
+                      </span>
+                      <span className="text-[10px] text-gray-400 mt-0.5">Pitch</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-3 py-2 min-w-[64px]">
-                  <span className="text-lg font-extrabold tabular-nums leading-none text-gray-700">
-                    {result.pause_count}
-                  </span>
-                  <span className="text-[10px] text-gray-400 mt-0.5">Pauses</span>
+              )}
+
+              {/* Analysis notes */}
+              {result.analysis_notes && result.analysis_notes.length > 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-1">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                    Analysis Notes
+                  </p>
+                  {result.analysis_notes.map((note, i) => (
+                    <div key={i} className="flex items-start gap-1.5">
+                      <span className="text-gray-400 mt-0.5 shrink-0">·</span>
+                      <span className="text-xs text-gray-600 leading-relaxed">{note}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
 
               {/* Transcript */}
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                  Transcript
-                </p>
-                <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {result.transcript}
-                </p>
-                {result.transcript && !result.transcript.startsWith("[") && (
-                  <button
-                    type="button"
-                    onClick={() => onTranscript?.(result.transcript)}
-                    className="mt-2 text-xs text-brand-600 hover:text-brand-700 font-medium underline underline-offset-2"
-                  >
-                    Use transcript as typed answer
-                  </button>
-                )}
-              </div>
+              {result.status !== "invalid_audio" && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                    Transcript
+                  </p>
+                  <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
+                    {result.transcript}
+                  </p>
+                  {result.transcript && !result.transcript.startsWith("[") && (
+                    <button
+                      type="button"
+                      onClick={() => onTranscript?.(result.transcript)}
+                      className="mt-2 text-xs text-brand-600 hover:text-brand-700 font-medium underline underline-offset-2"
+                    >
+                      Use transcript as typed answer
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Re-record */}
               <button

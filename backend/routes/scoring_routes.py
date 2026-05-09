@@ -63,14 +63,20 @@ async def analyze_audio(
         filename=audio.filename or "audio.webm",
     )
 
-    # ── Persist to session ────────────────────────────────────────────────────
-    if session_id and session_id.strip():
+    # ── Persist to session (skip invalid audio — don't pollute scoring) ─────────
+    if session_id and session_id.strip() and result.get("status") != "invalid_audio":
         audio_entry: dict = {
             "question_number":             question_number,
             "confidence_score":            result["confidence_score"],
             "communication_clarity_score": result["communication_clarity_score"],
             "pause_count":                 result["pause_count"],
             "speaking_rate":               result["speaking_rate"],
+            "words_per_minute":            result.get("words_per_minute"),
+            "filler_word_count":           result.get("filler_word_count"),
+            "filler_ratio":                result.get("filler_ratio"),
+            "hesitation_level":            result.get("hesitation_level"),
+            "pitch_stability":             result.get("pitch_stability"),
+            "analysis_notes":              result.get("analysis_notes", []),
             "transcript":                  result["transcript"],
             "mode":                        result["mode"],
         }

@@ -1,5 +1,8 @@
 import api from "./api";
 
+const MEDIA_ANALYSIS_TIMEOUT_MS =
+  Number(import.meta.env.VITE_MEDIA_ANALYSIS_TIMEOUT_MS) || 120000;
+
 export async function startInterview(candidateId, selectedRole) {
   const response = await api.post("/api/interview/start", {
     candidate_id: candidateId,
@@ -69,6 +72,7 @@ export async function analyzeVideo({ videoBlob, filename = "capture.webm", sessi
 
   const response = await api.post("/api/scoring/video", form, {
     headers: { "Content-Type": "multipart/form-data" },
+    timeout: MEDIA_ANALYSIS_TIMEOUT_MS,
   });
   return response.data; // VideoAnalysisResponse
 }
@@ -81,6 +85,7 @@ export async function analyzeAudio({ audioBlob, sessionId, questionNumber }) {
 
   const response = await api.post("/api/scoring/audio", form, {
     headers: { "Content-Type": "multipart/form-data" },
+    timeout: MEDIA_ANALYSIS_TIMEOUT_MS,
   });
   return response.data; // AudioAnalysisResponse
 }
