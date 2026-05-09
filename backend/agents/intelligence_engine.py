@@ -71,6 +71,16 @@ _SKILL_TOPIC_MAP: dict[str, str] = {
 }
 
 
+def _topic_jitter(topic: str, low: int, high: int) -> int:
+    """
+    Deterministic ±(high-low)//2 jitter based on topic name hash.
+    Same topic always produces the same variation — reproducible across restarts.
+    """
+    seed = sum(ord(c) * (i + 1) for i, c in enumerate(topic[:10]))
+    span = max(high - low, 1)
+    return low + (seed % span)
+
+
 def _infer_level(analysis) -> str:
     if not analysis:
         return "mid"
@@ -90,25 +100,55 @@ def _skill_to_topic(skill: str, role: str) -> str:
 
 
 def _initial_mastery_for_topic(topic: str, strong_skills: list[str],
-                                weak_skills: list[str], level: str) -> int:
+                                weak_skills: list[str], level: str,
+                                all_skills: list[str] | None = None) -> int:
     """
     Estimate prior mastery for a topic before any answers.
-      strong resume skill     → 65-75
-      weak resume area        → 35-45
-      untested topic          → 50
-    Offset by inferred level: senior +5, junior -5.
+
+    Scoring tiers (before level offset + deterministic jitter):
+      ≥2 resume skills map to this topic  → base 63   (clear evidence)
+      1  resume skill maps to this topic  → base 55   (some evidence)
+      Topic name in a weak_area string    → base 38   (explicit gap)
+      No mapping found                    → base 47   (unknown)
+
+    Level offset: senior +6, mid 0, junior −6.
+    Jitter: ±4 deterministic hash — no two topics are identical.
     """
-    level_offset = {"senior": 5, "mid": 0, "junior": -5}.get(level, 0)
+    level_offset = {"senior": 6, "mid": 0, "junior": -6}.get(level, 0)
+    topic_lower = topic.lower()
 
-    for s in strong_skills:
-        if topic.lower() in s.lower() or s.lower() in topic.lower():
-            return min(100, 70 + level_offset)
+    # Count resume skills that map to this topic via _SKILL_TOPIC_MAP
+    skill_hits = 0
+    if all_skills:
+        for s in all_skills:
+            sl = s.lower()
+            for key, mapped_topic in _SKILL_TOPIC_MAP.items():
+                if key in sl and mapped_topic.lower() == topic_lower:
+                    skill_hits += 1
+                    break
 
-    for w in weak_skills:
-        if topic.lower() in w.lower() or w.lower() in topic.lower():
-            return max(20, 40 + level_offset)
+    # Also check direct name containment as fallback
+    if skill_hits == 0:
+        for s in (strong_skills or []):
+            if topic_lower in s.lower() or s.lower() in topic_lower:
+                skill_hits += 1
 
-    return max(20, 50 + level_offset)
+    # Check for explicit weak area designation
+    is_weak = any(topic_lower in w.lower() or w.lower() in topic_lower for w in (weak_skills or []))
+
+    if is_weak:
+        base = 38
+    elif skill_hits >= 2:
+        base = 63
+    elif skill_hits == 1:
+        base = 55
+    else:
+        base = 47
+
+    # Apply level offset then jitter (±4 deterministic)
+    adjusted = base + level_offset
+    jitter = _topic_jitter(topic, -4, 5)   # yields −4 to +4
+    return max(10, min(95, adjusted + jitter))
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -270,7 +310,7 @@ def initialize_candidate_state(
     skill_mastery: dict[str, int] = {}
     for item in interview_plan:
         skill_mastery[item.topic] = _initial_mastery_for_topic(
-            item.topic, strong_skills, weak_skills, level
+            item.topic, strong_skills, weak_skills, level, all_skills=skills
         )
 
     # Also initialise for any curriculum topic not in the plan
@@ -278,7 +318,7 @@ def initialize_candidate_state(
     for topic in curriculum:
         if topic not in skill_mastery:
             skill_mastery[topic] = _initial_mastery_for_topic(
-                topic, strong_skills, weak_skills, level
+                topic, strong_skills, weak_skills, level, all_skills=skills
             )
 
     next_action = interview_plan[0].topic if interview_plan else "Project Deep Dive"
@@ -332,13 +372,40 @@ def update_candidate_state(
                 topic = key
                 break
 
+    # ── Increment answer counter ──────────────────────────────────────────────
+    state.answers_answered = getattr(state, "answers_answered", 0) + 1
+
     # ── Update skill mastery ──────────────────────────────────────────────────
-    # Bayesian-style update: blend prior with observed score
+    # Bayesian-style update: blend prior with observed score.
+    # Weight adjusts based on answer count to trust observed evidence more over time:
+    #   Q1 answer: 60% prior / 40% observed
+    #   Q3+ answer: 50% prior / 50% observed
+    obs_weight = 0.45 if state.answers_answered >= 3 else 0.40
+    prior_weight = 1.0 - obs_weight
+
     if topic and topic in state.skill_mastery:
         prior = state.skill_mastery[topic]
-        # Weight: 60% prior, 40% observed tech_score
-        updated = round(prior * 0.6 + tech_score * 0.4)
+        updated = round(prior * prior_weight + tech_score * obs_weight)
         state.skill_mastery[topic] = max(5, min(100, updated))
+
+    # Also update adjacent topics that are closely linked to the answered topic
+    # (e.g. a strong Database answer also signals SQL/query knowledge)
+    _ADJACENT_TOPICS: dict[str, list[str]] = {
+        "Database Design":      ["Database", "Performance"],
+        "REST Fundamentals":    ["API Design", "Authentication"],
+        "React Internals":      ["Frontend Architecture", "Performance Optimization"],
+        "Authentication":       ["Security", "REST Fundamentals"],
+        "System Design":        ["Performance", "Cloud Architecture"],
+        "Kubernetes":           ["Container Fundamentals", "Cloud Architecture"],
+        "Deep Learning":        ["Transfer Learning", "MLOps"],
+        "Pipeline Design":      ["Processing Paradigms", "Data Quality"],
+    }
+    for adj in _ADJACENT_TOPICS.get(topic, []):
+        if adj in state.skill_mastery:
+            adj_prior = state.skill_mastery[adj]
+            # Weak signal from adjacency: 85% prior / 15% observed
+            adj_updated = round(adj_prior * 0.85 + tech_score * 0.15)
+            state.skill_mastery[adj] = max(5, min(100, adj_updated))
 
     # ── Confidence trend ──────────────────────────────────────────────────────
     # Collect all tech scores observed so far from risk flags analysis
@@ -375,6 +442,23 @@ def update_candidate_state(
             state.communication_trend = "fair"
         else:
             state.communication_trend = "poor"
+
+    # ── Track concept gaps from missing_points ────────────────────────────────
+    missing_points = answer_record.get("evaluation", {}).get("missing_points", [])
+    concept_gaps = dict(getattr(state, "concept_gaps", {}) or {})
+    for concept in missing_points:
+        key = concept.lower()[:60]
+        concept_gaps[key] = concept_gaps.get(key, 0) + 1
+    state.concept_gaps = concept_gaps
+
+    # ── Track per-domain performance history ──────────────────────────────────
+    domain_performance = dict(getattr(state, "domain_performance", {}) or {})
+    if topic:
+        domain_key = topic
+        history = list(domain_performance.get(domain_key, []))
+        history.append(tech_score)
+        domain_performance[domain_key] = history[-5:]  # keep last 5
+    state.domain_performance = domain_performance
 
     # ── Risk flags ────────────────────────────────────────────────────────────
     flags = list(state.risk_flags)
@@ -440,17 +524,45 @@ def make_next_question_decision(
     has_confidence_flag = any("Low vocal confidence" in f for f in risk_flags)
     has_repeated_weakness = any("Repeated weakness" in f and current_topic in f for f in risk_flags)
 
-    if has_repeated_weakness:
-        decision_type = "remediation"
-        detected_issue = (
-            f"'{current_topic}' has been flagged as weak twice. "
-            "The candidate needs reinforcement on fundamentals before advancing."
+    # Check for persistent domain weakness via domain_performance history
+    domain_perf = getattr(candidate_state, "domain_performance", {}) or {}
+    topic_history = domain_perf.get(current_topic, [])
+    persistent_weak = len(topic_history) >= 2 and (sum(topic_history[-2:]) / 2) < 50
+
+    if has_repeated_weakness or persistent_weak:
+        # If there's a totally different domain available, pivot instead of drilling
+        covered_set = {h.get("question", {}).get("topic", "") for h in session_history}
+        covered_set.add(current_topic)
+        plan_topics_in_order = [item.topic for item in interview_plan]
+        alternate = next(
+            (t for t in plan_topics_in_order
+             if t not in covered_set and t != current_topic),
+            None,
         )
+        if alternate and alternate != current_topic:
+            decision_type = "domain_pivot"
+            detected_issue = (
+                f"'{current_topic}' has shown consistent weakness "
+                f"(last two scores avg {round(sum(topic_history[-2:])/max(len(topic_history[-2:]),1))}/100). "
+                "Pivoting to a different domain to avoid stalling momentum."
+            )
+        else:
+            decision_type = "remediation"
+            detected_issue = (
+                f"'{current_topic}' has been flagged as weak twice. "
+                "The candidate needs reinforcement on fundamentals before advancing."
+            )
     elif has_confidence_flag:
         decision_type = "confidence_recovery"
         detected_issue = (
             "Low vocal confidence detected via audio analysis. "
             "Easing to a more accessible question to rebuild momentum."
+        )
+    elif tech_score >= 85 and depth_score >= 65:
+        decision_type = "aggressive_escalation"
+        detected_issue = (
+            f"Exceptional performance ({tech_score}/100, depth {depth_score}/100) on '{current_topic}'. "
+            "Jumping to the hardest available topic to fully test the ceiling."
         )
     elif tech_score >= 80:
         decision_type = "increase_difficulty"
@@ -484,10 +596,27 @@ def make_next_question_decision(
 
     # Use interview plan as the preferred order
     plan_topics_in_order = [item.topic for item in interview_plan]
-    next_planned = next(
-        (t for t in plan_topics_in_order if t not in covered_topics),
-        None
-    )
+
+    # For aggressive_escalation: jump to hardest uncovered plan topic
+    if decision_type == "aggressive_escalation":
+        hard_topics = [
+            item.topic for item in interview_plan
+            if item.difficulty == "hard" and item.topic not in covered_topics
+        ]
+        next_planned = hard_topics[0] if hard_topics else next(
+            (t for t in plan_topics_in_order if t not in covered_topics), None
+        )
+    # For domain_pivot: already computed alternate above; reuse it
+    elif decision_type == "domain_pivot":
+        next_planned = next(
+            (t for t in plan_topics_in_order if t not in covered_topics and t != current_topic),
+            None,
+        )
+    else:
+        next_planned = next(
+            (t for t in plan_topics_in_order if t not in covered_topics),
+            None,
+        )
 
     # Fallback: use weakest untested topic from mastery map
     if not next_planned:
@@ -503,17 +632,25 @@ def make_next_question_decision(
         next_planned = current_topic
 
     # ── Determine next difficulty ──────────────────────────────────────────────
-    if decision_type == "increase_difficulty":
+    if decision_type == "aggressive_escalation":
+        next_diff = "hard"
+    elif decision_type == "increase_difficulty":
         diff_map = {"easy": "medium", "medium": "hard", "hard": "hard"}
         next_diff = diff_map.get(current_diff, "medium")
     elif decision_type in ("strengthen_fundamentals", "confidence_recovery", "remediation"):
         diff_map = {"hard": "medium", "medium": "easy", "easy": "easy"}
         next_diff = diff_map.get(current_diff, "easy")
+    elif decision_type == "domain_pivot":
+        next_diff = "medium"   # reset difficulty on topic pivot
     else:
         next_diff = current_diff  # keep same difficulty for follow-up
 
     # ── Build human-readable reason ────────────────────────────────────────────
     reason_templates = {
+        "aggressive_escalation": (
+            f"Impressive — {tech_score}/100 with strong depth on '{current_topic}'. "
+            f"Jumping straight to '{next_planned}' at hard difficulty to find your ceiling."
+        ),
         "increase_difficulty": (
             f"You scored {tech_score}/100 on '{current_topic}' — excellent. "
             f"Moving to '{next_planned}' at {next_diff} difficulty to continue stretching your knowledge."
@@ -533,6 +670,10 @@ def make_next_question_decision(
         "remediation": (
             f"'{current_topic}' has appeared weak more than once. "
             f"Probing '{next_planned}' to check if this is a systematic gap or a specific knowledge hole."
+        ),
+        "domain_pivot": (
+            f"Shifting focus from '{current_topic}' to '{next_planned}' at medium difficulty. "
+            "Seeing your performance across different domains gives a more complete picture."
         ),
         "final_synthesis": (
             f"You've covered all the planned areas for {candidate_state.selected_role}. "
@@ -554,6 +695,10 @@ def make_next_question_decision(
     mastery_val = candidate_state.skill_mastery.get(next_planned)
     if mastery_val is not None:
         evidence.append(f"Prior mastery estimate for '{next_planned}': {mastery_val}/100")
+    # Include rubric improvement hint if available
+    improvement_hint = last_evaluation.get("improvement_hint", "")
+    if improvement_hint:
+        evidence.append(f"Coaching hint: {improvement_hint[:80]}")
 
     return AgentDecisionTrace(
         decision_type=decision_type,

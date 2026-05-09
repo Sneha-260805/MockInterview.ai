@@ -788,9 +788,9 @@ async def next_question(
     covered_topics = {q["topic"] for q in questions_asked}
     asked_ids = {q["question"][:20] for q in questions_asked}
 
-    # Project follow-up detection from last answer text
+    # Last answer text for contextual follow-up detection
     last_answer_text = answers[-1]["answer_text"] if answers else ""
-    project_followup = bool(last_answer_text) and _mentions_project(last_answer_text)
+    resume_techs = session_data.get("resume_techs", [])
 
     # ── Behavioral question injection at Q3 ───────────────────────────────────
     # Always include one behavioral question mid-interview to assess soft skills.
@@ -798,7 +798,6 @@ async def next_question(
         import random
         behavioral_q = random.choice(_BEHAVIORAL_BANK)
         asked_starts = {q["question"][:30] for q in questions_asked}
-        # Pick one not already asked
         for bq in _BEHAVIORAL_BANK:
             if bq["q"][:30] not in asked_starts:
                 behavioral_q = bq
@@ -814,26 +813,32 @@ async def next_question(
         )
         return next_q, reason, False
 
-    if project_followup and req.current_topic != "Project Deep Dive":
-        next_q = Question(
-            question_id=_qid(),
-            question=(
-                "You mentioned a specific project in your answer. Could you go deeper into the "
-                "hardest technical challenge you faced on that project and exactly how you solved it?"
-            ),
-            difficulty="medium", topic="Project Deep Dive",
-            expected_points=[
-                "Describe the specific technical challenge clearly",
-                "Explain your debugging or problem-solving approach",
-                "Detail the solution and any trade-offs made",
-                "Reflect on what you learned from the experience",
-            ],
-        )
-        reason = _adaptation_reason(
-            req.last_answer_score, req.confidence_score,
-            old_diff, "medium", req.current_topic, "Project Deep Dive", True,
-        )
-        return next_q, reason, False
+    # ── Contextual follow-up detection ────────────────────────────────────────
+    # Check if the candidate's answer mentions a specific technology or concept
+    # that warrants a targeted follow-up question rather than a bank question.
+    if last_answer_text and n_answered >= 1:
+        try:
+            from services.followup_generator import generate_followup
+            followup_data = generate_followup(
+                answer=last_answer_text,
+                current_topic=req.current_topic,
+                resume_techs=resume_techs,
+            )
+            if followup_data:
+                fu_question, fu_reason, fu_points = followup_data
+                # Only use follow-up if this topic hasn't been covered by a follow-up already
+                followup_topics_used = session_data.get("followup_topics_used", [])
+                fu_fingerprint = fu_question[:40]
+                if fu_fingerprint not in followup_topics_used:
+                    next_q = Question(
+                        question_id=_qid(), question=fu_question,
+                        difficulty=target_diff, topic=f"Follow-Up: {req.current_topic}",
+                        expected_points=fu_points,
+                    )
+                    session_data.setdefault("followup_topics_used", []).append(fu_fingerprint)
+                    return next_q, fu_reason, False
+        except Exception as exc:
+            logger.warning("Contextual follow-up failed, continuing: %s", exc)
 
     # Try LLM, then fall back to static bank
     next_q = await _generate_next_with_llm(

@@ -392,50 +392,210 @@ def _rule_feedback(
     tech: int, comm: int, conf: int, eng: int,
     role_fit: int, overall: int,
     role: str, strengths: list[str], improvements: list[str],
+    session_data: dict | None = None,
+    analysis=None,
+    audio_scores: list | None = None,
 ) -> str:
-    level    = "strong" if tech >= 70 else "solid" if tech >= 55 else "developing"
-    fit_desc = "excellent" if role_fit >= 80 else "good" if role_fit >= 65 else "emerging"
-    top_s    = strengths[0]    if strengths    else "foundational technical knowledge"
-    top_i    = improvements[0] if improvements else "deepening technical depth across core topics"
+    """
+    Flowing multi-paragraph narrative feedback.
 
-    opening = (
-        f"Your mock interview for the {role} role demonstrated {level} technical proficiency "
-        f"with an overall score of {overall}/100. "
-        f"Your background shows {fit_desc} alignment with this role (fit score: {role_fit}/100)."
+    Structure:
+      ¶1 — Performance overview: role, overall score, fit, inferred level
+      ¶2 — Strongest moment: best topic with concrete evidence
+      ¶3 — Key weakness: what was missed and why it matters for the role
+      ¶4 — Communication coaching (audio) + behavioural observation
+      ¶5 — Action plan: project hook + single concrete next step
+    """
+    level_adj = "strong" if tech >= 70 else "solid" if tech >= 55 else "developing"
+    fit_desc  = "excellent" if role_fit >= 80 else "good" if role_fit >= 65 else "emerging"
+    readiness = (
+        "ready to compete at this level" if overall >= 72 and tech >= 68
+        else "approaching readiness" if overall >= 58
+        else "still building the depth needed"
     )
 
-    parts = []
-    if strengths:
-        parts.append(
-            f"You demonstrated clear strength in {top_s}, "
-            f"covering the key concepts interviewers look for at this level."
+    # Candidate first name
+    name = ""
+    if analysis and getattr(analysis, "candidate_name", ""):
+        name = analysis.candidate_name.strip().split()[0]
+    salutation = f"{name}, you" if name else "You"
+
+    # Gather per-topic performance for paragraphs 2 & 3
+    strong_topics: list[tuple[str, int]] = []
+    weak_topics:   list[tuple[str, int]] = []
+    if session_data:
+        answers   = session_data.get("answers", [])
+        questions = session_data.get("questions_asked", [])
+        q_by_id   = {q["question_id"]: q for q in questions}
+        for a in answers:
+            matched_q = q_by_id.get(a.get("question_id", ""))
+            topic = (matched_q.get("topic", "") if matched_q else "").strip()
+            score = a["evaluation"]["technical_score"]
+            if topic and "Behavioral" not in topic and "Follow-Up" not in topic:
+                if score >= 70:
+                    strong_topics.append((topic, score))
+                elif score < 55:
+                    weak_topics.append((topic, score))
+
+    best_topic  = max(strong_topics, key=lambda x: x[1]) if strong_topics else None
+    worst_topic = min(weak_topics,   key=lambda x: x[1]) if weak_topics   else None
+
+    # ── Paragraph 1: Performance overview ────────────────────────────────────
+    p1 = (
+        f"{salutation} completed the mock interview for the {role} role and demonstrated "
+        f"{level_adj} technical proficiency, finishing with an overall score of {overall}/100. "
+        f"Your background shows {fit_desc} alignment with this role (fit score: {role_fit}/100), "
+        f"and based on the answers across all topics, you appear {readiness}."
+    )
+
+    # ── Paragraph 2: Strongest moment ────────────────────────────────────────
+    if best_topic:
+        covered_pts = []
+        if session_data:
+            for a in session_data.get("answers", []):
+                q = q_by_id.get(a.get("question_id", ""))
+                t = (q.get("topic", "") if q else "").strip()
+                if t == best_topic[0]:
+                    covered_pts = a["evaluation"].get("covered_points", [])[:2]
+                    break
+        evidence = (
+            f", specifically covering {' and '.join(covered_pts)}" if covered_pts
+            else ""
         )
-    if improvements:
-        parts.append(
-            f"The highest-impact area to address before your next interview is: {top_i}. "
-            f"The personalised learning plan below maps directly to your identified gaps."
+        p2 = (
+            f"Your strongest moment came on {best_topic[0]} (scored {best_topic[1]}/100){evidence}. "
+            "This is exactly the kind of grounded, well-articulated answer that stands out to "
+            "hiring panels — keep that level of specificity as a benchmark for every topic."
         )
+    elif strengths:
+        p2 = (
+            f"You demonstrated the clearest command of '{strengths[0]}', "
+            "hitting the core concepts interviewers look for at this level. "
+            "Use that response as a template: specific, reasoned, and backed by context."
+        )
+    else:
+        p2 = (
+            "Across the session you showed a willingness to reason through unfamiliar territory, "
+            "which is a signal interviewers value even when an answer isn't perfect."
+        )
+
+    # ── Paragraph 3: Key weakness ─────────────────────────────────────────────
+    if worst_topic:
+        missed = []
+        if session_data:
+            for a in session_data.get("answers", []):
+                q = q_by_id.get(a.get("question_id", ""))
+                t = (q.get("topic", "") if q else "").strip()
+                if t == worst_topic[0]:
+                    missed = a["evaluation"].get("missing_points", [])[:2]
+                    break
+        missed_text = (
+            f" — particularly {' and '.join(missed)}" if missed else ""
+        )
+        p3 = (
+            f"The area that needs the most attention before your next interview is {worst_topic[0]} "
+            f"(scored {worst_topic[1]}/100{missed_text}). "
+            f"For a {role} role, interviewers treat this as a core competency, so a gap here "
+            "will surface in every hiring loop. The learning plan below targets it directly."
+        )
+    elif improvements:
+        p3 = (
+            f"The most impactful gap to close is: '{improvements[0]}'. "
+            f"This concept comes up consistently in {role} interviews and "
+            "shoring it up will meaningfully improve your close rate."
+        )
+    else:
+        p3 = (
+            "No single topic stood out as a critical gap — the main opportunity is "
+            "deepening every answer with trade-off reasoning and concrete examples, "
+            "which will lift your scores from good to exceptional."
+        )
+
+    # ── Paragraph 4: Communication coaching + behavioural observation ─────────
+    comm_lines: list[str] = []
+
+    if audio_scores:
+        real_audio = [a for a in audio_scores if a.get("mode") in ("faster_whisper", "whisper")]
+        if real_audio:
+            avg_wpm    = sum(a.get("words_per_minute", 130) or 130 for a in real_audio) / len(real_audio)
+            avg_filler = sum(a.get("filler_ratio", 0) or 0 for a in real_audio) / len(real_audio)
+            hi_hesit   = sum(1 for a in real_audio if a.get("hesitation_level") == "high")
+
+            if avg_wpm > 175:
+                comm_lines.append(
+                    f"your speaking pace averaged ~{round(avg_wpm)} WPM — slightly faster than ideal; "
+                    "deliberately pausing at key transitions gives the interviewer time to absorb complex points"
+                )
+            elif avg_wpm < 95:
+                comm_lines.append(
+                    f"at ~{round(avg_wpm)} WPM your delivery was slower than typical; "
+                    "a slightly brisker pace maintains momentum and signals confidence"
+                )
+            if avg_filler > 0.08:
+                comm_lines.append(
+                    f"filler words accounted for ~{round(avg_filler * 100)}% of speech — "
+                    "replacing 'um' and 'uh' with a one-second silence sounds far more decisive"
+                )
+            if hi_hesit > len(real_audio) // 2:
+                comm_lines.append(
+                    "there were frequent mid-answer pauses; try the 'think → speak' habit: "
+                    "take 3 seconds of silence before answering rather than thinking aloud"
+                )
+
+    if comm_lines:
+        intro = "On the communication side, "
+        p4 = intro + "; ".join(comm_lines) + ". "
+    else:
+        p4 = ""
+
+    # Add behavioural observation regardless
     if tech >= 70 and conf >= 70:
-        parts.append(
-            "Your answers combined technical accuracy with confident, structured delivery — "
-            "a combination that stands out in real interviews."
+        p4 += (
+            "Your answers combined technical accuracy with confident, well-paced delivery — "
+            "that combination is rare and genuinely memorable in real panels."
         )
     elif tech >= 70:
-        parts.append(
-            "While your technical knowledge is strong, practising concise, confident delivery "
-            "will further strengthen your interview presence."
+        p4 += (
+            "Your technical knowledge is solid; the next frontier is projecting that "
+            "knowledge with the same certainty you demonstrate when writing it down. "
+            "Record yourself answering one question per day — the gap closes quickly."
         )
     elif conf >= 70:
-        parts.append(
-            "Your communication style came across well — channelling that confidence into "
-            "deeper technical answers will significantly elevate your performance."
+        p4 += (
+            "Your delivery came across as assured and engaging. "
+            "Channelling that presence into deeper technical specifics will "
+            "significantly raise your hiring signal."
+        )
+    else:
+        p4 += (
+            "Structured practice — answering aloud, timing yourself, and reviewing the recording — "
+            "is the single fastest way to raise both your technical clarity and your delivery confidence."
         )
 
-    closing = (
-        "Work through the recommended resources below and revisit this interview format regularly. "
-        "Technical interview skills improve measurably with structured, deliberate practice."
+    # ── Paragraph 5: Action plan with project hook ────────────────────────────
+    proj_hook = ""
+    if analysis and getattr(analysis, "projects", []):
+        proj  = analysis.projects[0]
+        techs = ", ".join(proj.technologies[:2]) if proj.technologies else "your primary stack"
+        proj_hook = (
+            f"Your '{proj.name}' project (built with {techs}) is your strongest interview asset — "
+            "practise narrating its architecture, your personal contributions, and one specific "
+            "trade-off decision in under 90 seconds. "
+        )
+
+    next_step = (
+        f"Start with the top-priority resource in the learning plan below"
+        + (f", and then revisit {worst_topic[0]} with a timed practice question" if worst_topic else "")
+        + ". "
+        "Technical interview performance compounds: consistent deliberate practice over two weeks "
+        "produces more improvement than a single intensive cram session."
     )
-    return " ".join([opening] + parts + [closing])
+
+    p5 = proj_hook + next_step
+
+    # Assemble — skip empty paragraphs
+    paragraphs = [p for p in [p1, p2, p3, p4, p5] if p.strip()]
+    return "\n\n".join(paragraphs)
 
 
 async def _llm_feedback(
@@ -749,7 +909,10 @@ async def generate_report(
     )
     if not final_feedback:
         final_feedback = _rule_feedback(
-            tech, comm, conf, eng, role_fit, overall, role, strengths, improvements
+            tech, comm, conf, eng, role_fit, overall, role, strengths, improvements,
+            session_data=session_data,
+            analysis=analysis,
+            audio_scores=audio_scores,
         )
 
     # ── Answer summaries ──────────────────────────────────────────────────────

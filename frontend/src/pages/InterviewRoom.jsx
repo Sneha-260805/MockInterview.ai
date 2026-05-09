@@ -8,12 +8,18 @@ import VideoRecorder from "../components/VideoRecorder";
 import InterviewPlanTimeline from "../components/InterviewPlanTimeline";
 import AgentTracePanel from "../components/AgentTracePanel";
 import { CandidateStatePanel } from "../components/SkillMasteryMap";
-import { getSession, evaluateAnswer, nextQuestion } from "../services/interviewService";
+import CoachingNudge from "../components/CoachingNudge";
+import ImprovementDelta from "../components/ImprovementDelta";
+import { getSession, evaluateAnswer, nextQuestion, improveAnswer } from "../services/interviewService";
 
 // ── State machine constants ──────────────────────────────────────────────────
 const S  = { loading: "loading", ready: "ready", error: "error" };
 const ES = { idle: "idle", evaluating: "evaluating", done: "done", error: "error" };
 const NS = { idle: "idle", fetching: "fetching", error: "error" };
+
+// Coaching-loop retry states: NONE → COACHING → RETRYING → COMPARED
+const RS = { none: "none", coaching: "coaching", retrying: "retrying", compared: "compared" };
+const MAX_RETRIES = 2; // candidate can retry up to 2 times per question (attempts 2 and 3)
 
 // ── Confidence score derived from evaluation + answer length ─────────────────
 function deriveConfidence(evaluation, answerText) {
@@ -106,6 +112,13 @@ export default function InterviewRoom() {
   const [candidateState, setCandidateState] = useState(location.state?.session?.candidate_state ?? null);
   const [decisionTrace,  setDecisionTrace]  = useState(null);
 
+  // ── Coaching-loop retry state ─────────────────────────────────────────────
+  const [retryStatus,       setRetryStatus]       = useState(RS.none);    // coaching state machine
+  const [retryAnswer,       setRetryAnswer]        = useState("");         // editable text in coaching textarea
+  const [retryAttempt,      setRetryAttempt]       = useState(2);          // current attempt number
+  const [improvedResult,    setImprovedResult]     = useState(null);       // ImprovedEvaluationResult
+  const [retryError,        setRetryError]         = useState("");
+
   // Auto-scroll to evaluation after submit
   const evalRef = useRef(null);
 
@@ -180,6 +193,62 @@ export default function InterviewRoom() {
     setAnswer(submittedAnswer);
   }
 
+  // ── Coaching loop ──────────────────────────────────────────────────────────
+
+  /** Enter coaching mode: prefill retry textarea with last submitted answer. */
+  function handleStartCoaching() {
+    setRetryAnswer(submittedAnswer);
+    setRetryStatus(RS.coaching);
+    setRetryError("");
+    setImprovedResult(null);
+  }
+
+  /** Cancel coaching and go back to the evaluation view. */
+  function handleCancelCoaching() {
+    setRetryStatus(RS.none);
+    setRetryError("");
+  }
+
+  /** Submit improved answer for re-evaluation. */
+  async function handleImproveSubmit() {
+    if (!retryAnswer.trim() || retryStatus === RS.retrying) return;
+    setRetryStatus(RS.retrying);
+    setRetryError("");
+
+    try {
+      const result = await improveAnswer({
+        sessionId:          session.session_id,
+        questionId:         activeQuestion.question_id,
+        question:           activeQuestion.question,
+        improvedAnswer:     retryAnswer,
+        expectedPoints:     activeQuestion.expected_points,
+        previousEvaluation: evaluation,
+        attemptNumber:      retryAttempt,
+        topic:              activeQuestion.topic,
+      });
+
+      setImprovedResult(result);
+      setRetryAttempt((prev) => prev + 1);
+      setRetryStatus(RS.compared);
+
+      // Update the main evaluation with the latest result so "Next Question"
+      // passes the updated score to the intelligence engine.
+      setEvaluation(result);
+      setSubmittedAnswer(retryAnswer);
+    } catch (err) {
+      setRetryError(err.message || "Re-evaluation failed. Please try again.");
+      setRetryStatus(RS.coaching); // fall back to coaching so user can retry
+    }
+  }
+
+  /** After seeing the delta, allow another retry if attempts remain. */
+  function handleRetryAgain() {
+    if (retryAttempt > MAX_RETRIES + 1) return; // +1 because retryAttempt is already incremented
+    setRetryAnswer(improvedResult ? (improvedResult.feedback ? retryAnswer : retryAnswer) : retryAnswer);
+    setRetryStatus(RS.coaching);
+    setRetryError("");
+  }
+
   // ── Fetch next question ────────────────────────────────────────────────────
   async function handleNextQuestion() {
     if (nextStatus === NS.fetching) return;
@@ -230,6 +299,12 @@ export default function InterviewRoom() {
       setAudioResult(null);
       setVideoResult(null);
       setNextStatus(NS.idle);
+      // Reset coaching state for new question
+      setRetryStatus(RS.none);
+      setRetryAnswer("");
+      setRetryAttempt(2);
+      setImprovedResult(null);
+      setRetryError("");
     } catch (err) {
       setNextError(err.message || "Could not fetch next question. Please try again.");
       setNextStatus(NS.error);
@@ -237,10 +312,17 @@ export default function InterviewRoom() {
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const isEvaluating   = evalStatus === ES.evaluating;
-  const isDone         = evalStatus === ES.done;
-  const isFetchingNext = nextStatus === NS.fetching;
-  const questionNumber = history.length + 1;
+  const isEvaluating    = evalStatus === ES.evaluating;
+  const isDone          = evalStatus === ES.done;
+  const isFetchingNext  = nextStatus === NS.fetching;
+  const questionNumber  = history.length + 1;
+
+  // Coaching loop derived
+  const isCoaching      = retryStatus === RS.coaching;
+  const isRetrying      = retryStatus === RS.retrying;
+  const hasCompared     = retryStatus === RS.compared;
+  const canRetry        = isDone && retryStatus === RS.none && retryAttempt <= MAX_RETRIES + 1;
+  const canRetryAgain   = hasCompared && retryAttempt <= MAX_RETRIES + 1;
 
   // ── Loading ───────────────────────────────────────────────────────────────
   if (status === S.loading) {
@@ -542,6 +624,70 @@ export default function InterviewRoom() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── Coaching loop ─────────────────────────────────────────── */}
+
+          {/* "Try Again" entry CTA — visible right after first evaluation */}
+          {canRetry && !isCoaching && !hasCompared && (
+            <div className="flex items-center gap-3 px-1">
+              <button
+                onClick={handleStartCoaching}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+                  text-amber-700 bg-amber-50 border border-amber-300 hover:bg-amber-100
+                  transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+                Improve Answer
+              </button>
+              <p className="text-xs text-gray-400">
+                Edit your answer and resubmit to see if you can boost your score.
+              </p>
+            </div>
+          )}
+
+          {/* Coaching nudge panel */}
+          {(isCoaching || isRetrying) && (
+            <CoachingNudge
+              evaluation={improvedResult ?? evaluation}
+              answer={retryAnswer}
+              onAnswerChange={setRetryAnswer}
+              onSubmit={handleImproveSubmit}
+              onCancel={handleCancelCoaching}
+              isSubmitting={isRetrying}
+              attemptNumber={retryAttempt}
+            />
+          )}
+
+          {/* Error during retry */}
+          {retryError && retryStatus === RS.coaching && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <p className="text-sm text-red-700">{retryError}</p>
+            </div>
+          )}
+
+          {/* Improvement delta panel */}
+          {hasCompared && improvedResult && (
+            <div className="space-y-3">
+              <ImprovementDelta improvedResult={improvedResult} />
+              {canRetryAgain && (
+                <button
+                  onClick={handleRetryAgain}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+                    text-amber-700 bg-amber-50 border border-amber-300 hover:bg-amber-100
+                    transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                  </svg>
+                  Try Once More
+                </button>
+              )}
             </div>
           )}
 

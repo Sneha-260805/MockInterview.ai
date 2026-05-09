@@ -94,10 +94,89 @@ async def _llm_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult | None:
 # ── Rule-based path ───────────────────────────────────────────────────────────
 
 def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
-    ratio, covered, missing = sc.keyword_coverage(req.answer, req.expected_points)
-    depth = sc.depth_score(req.answer)
-    correctness = sc.correctness_score(ratio)
-    technical = sc.technical_score_rule_based(ratio, depth)
+    """
+    Competence-first evaluation.
+
+    Design philosophy — behave like a realistic technical interviewer:
+      • Depth of reasoning carries more weight than checklist completeness.
+      • A candidate who clearly understands a topic but missed one rubric point
+        should not be penalised heavily.
+      • Strong positive signals (trade-offs, examples, personal experience,
+        metrics) are rewarded explicitly via competence floors.
+      • Semantic similarity is used as a bonus modifier, not a primary driver
+        (TF-IDF cosine is naturally low for paraphrased answers).
+
+    Pipeline:
+      1. Semantic coverage  → coverage ratio + covered/missing lists
+      2. depth_level()      → reasoning quality score 0–100 + signal list
+      3. Base technical     = depth × 0.60 + coverage × 0.40   (depth-led)
+      4. Semantic modifier  = doc_sim × 15   (max +15 bonus, never a penalty)
+      5. Competence floors  keyed on (signal count × coverage ratio)
+    """
+    try:
+        from services import semantic_scorer as sem
+
+        # Per-concept semantic coverage
+        ratio, covered, missing = sem.semantic_coverage(req.answer, req.expected_points)
+
+        # Document-level similarity — used only as a small bonus modifier
+        reference_text = ". ".join(req.expected_points) if req.expected_points else ""
+        doc_sim = sem.semantic_similarity(req.answer, reference_text) if reference_text else 0.0
+
+        # Depth / reasoning quality — the primary technical signal
+        _depth_level, depth, signals = sem.depth_level(req.answer)
+
+        # ── Coverage-based depth floor ───────────────────────────────────────
+        # A candidate who correctly covers 80% of expected concepts KNOWS the
+        # material, even if they didn't use explicit discourse markers (because,
+        # however, for example). Give them minimum depth credit for that knowledge.
+        # Formula: 100% coverage → at least 50 depth, 50% → at least 25.
+        #
+        # Guard: only apply for answers ≥ 45 words.  Short and shallow answers
+        # inflate coverage artificially via synonym expansion — a 40-word answer
+        # that names "jwt, token, sessions" should not get depth credit for high
+        # coverage when it contains zero reasoning.  A 45-word substantive answer
+        # with real concept explanation is a different signal entirely.
+        if len(req.answer.split()) >= 45:
+            depth = max(depth, round(ratio * 50))
+
+        # ── Base technical: depth-led, coverage-supported ───────────────────
+        coverage_score = round(ratio * 100)
+        technical = round(depth * 0.60 + coverage_score * 0.40)
+
+        # Semantic similarity as a pure upside modifier (max +15, never negative)
+        semantic_boost = round(min(doc_sim * 100, 100) * 0.15)
+        technical = min(100, technical + semantic_boost)
+
+        # ── Competence floors (interviewer realism) ─────────────────────────
+        # Map (signal_count × coverage) to minimum realistic interviewer scores.
+        # Floors only apply when there is evidence of genuine understanding — they
+        # do NOT trigger on signals alone without some concept coverage (ratio gate).
+        n_signals = len(signals)
+        if n_signals >= 4 and ratio >= 0.30:
+            technical = max(technical, 76)   # expert reasoning + solid coverage
+        elif n_signals >= 3 and ratio >= 0.25:
+            technical = max(technical, 78)   # strong reasoning + strong coverage
+        elif n_signals >= 2 and ratio >= 0.50:
+            technical = max(technical, 65)   # decent reasoning + solid coverage
+        elif n_signals >= 2 and ratio >= 0.20:
+            technical = max(technical, 55)   # structured reasoning + some coverage
+        elif n_signals >= 1 and ratio >= 0.60:
+            technical = max(technical, 63)   # some reasoning + comprehensive coverage
+        elif n_signals >= 1 and ratio >= 0.10:
+            technical = max(technical, 42)   # minimal structure present
+
+        correctness = sc.correctness_score(ratio)
+        technical = max(5, min(100, technical))
+
+    except Exception as exc:
+        logger.warning("Semantic scoring failed, falling back to keyword: %s", exc)
+        ratio, covered, missing = sc.keyword_coverage(req.answer, req.expected_points)
+        depth = sc.depth_score(req.answer)
+        signals = []
+        correctness = sc.correctness_score(ratio)
+        technical = sc.technical_score_rule_based(ratio, depth)
+
     feedback = sc.generate_feedback(covered, missing, technical, depth)
 
     return EvaluationResult(
@@ -112,15 +191,42 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
 
 def _add_rubric_scores(result: EvaluationResult, req: EvaluateAnswerRequest) -> EvaluationResult:
     """
-    Phase 11: Enrich an EvaluationResult with rubric-based scores.
-    Topic is extracted from the question text heuristically when not directly available.
-    Always falls back gracefully if topic cannot be determined.
+    Enrich an EvaluationResult with rubric-based scores AND blend rubric_total
+    into technical_score using an asymmetric formula:
+
+    Asymmetric rubric blend:
+      • When rubric_total ≥ technical_score:
+          blended = technical×0.55 + rubric×0.45   — rubric provides strong evidence boost
+      • When rubric_total < technical_score:
+          blended = technical×0.85 + rubric×0.15   — rubric slightly anchors, doesn't punish
+
+    Rationale: A candidate who demonstrated deep reasoning (high technical from depth signals)
+    but didn't surface specific rubric keywords should NOT be penalised for that mismatch.
+    Conversely, a keyword-heavy answer with weak depth SHOULD see its score improved by rubric.
     """
     try:
-        # Infer topic from the request if possible
         topic = getattr(req, "topic", None) or ""
         rubric_data = rubric.score_with_rubric(req.answer, topic, req.expected_points)
+
+        rt = rubric_data["rubric_total"]
+        ts = result.technical_score
+
+        # Asymmetric blend: rubric enriches upward, barely drags downward
+        if rt >= ts:
+            blended_tech = round(ts * 0.55 + rt * 0.45)
+        else:
+            blended_tech = round(ts * 0.85 + rt * 0.15)
+
+        blended_tech = max(5, min(100, blended_tech))
+
+        # Global floor: any substantive attempt (≥ 15 words) shouldn't score below 30.
+        # Prevents rubric vocabulary variation across topics from producing implausibly
+        # low scores for answers that are genuinely weak but not empty.
+        if len(req.answer.split()) >= 15:
+            blended_tech = max(blended_tech, 30)
+
         return result.model_copy(update={
+            "technical_score":        blended_tech,
             "rubric_scores":          rubric_data["rubric_scores"],
             "rubric_total":           rubric_data["rubric_total"],
             "evidence":               rubric_data["evidence"],

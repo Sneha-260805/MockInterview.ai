@@ -34,6 +34,43 @@ export async function generateFinalReport(sessionId) {
   return response.data; // FinalReport
 }
 
+/**
+ * Re-evaluate an improved answer for the same question (coaching loop retry).
+ *
+ * @param {Object} params
+ * @param {string} params.sessionId
+ * @param {string} params.questionId
+ * @param {string} params.question
+ * @param {string} params.improvedAnswer   - the candidate's improved text
+ * @param {string[]} params.expectedPoints
+ * @param {Object} params.previousEvaluation - EvaluationResult from first attempt
+ * @param {number} params.attemptNumber     - 2 for first retry, 3 for second
+ * @param {string} [params.topic]
+ * @returns {Promise<ImprovedEvaluationResult>}
+ */
+export async function improveAnswer({
+  sessionId,
+  questionId,
+  question,
+  improvedAnswer,
+  expectedPoints,
+  previousEvaluation,
+  attemptNumber = 2,
+  topic,
+}) {
+  const response = await api.post("/api/interview/improve-answer", {
+    session_id:           sessionId,
+    question_id:          questionId,
+    question,
+    improved_answer:      improvedAnswer,
+    expected_points:      expectedPoints,
+    previous_evaluation:  previousEvaluation,
+    attempt_number:       attemptNumber,
+    topic,
+  });
+  return response.data; // ImprovedEvaluationResult
+}
+
 export async function nextQuestion({ sessionId, lastAnswerScore, confidenceScore, currentTopic }) {
   const response = await api.post("/api/interview/next-question", {
     session_id: sessionId,

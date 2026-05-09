@@ -13,6 +13,7 @@ Dimension weights (total 100):
 """
 
 import re
+import math
 from typing import Dict, List, Tuple
 
 # ── Synonym expansion ─────────────────────────────────────────────────────────
@@ -432,15 +433,28 @@ def _score_dimension(answer_lower: str, keywords: List[str], max_score: int) -> 
     """
     Score one dimension by checking keyword/synonym presence.
     Returns (score, list_of_matched_terms).
+
+    Uses a sqrt curve with a 12% floor so that partial coverage is rewarded fairly:
+      score = floor + sqrt(ratio) × (max_score − floor)
+
+    Examples with max_score=30, floor=3 (10%):
+      0 matches  → 3   (not 0 — a little credit for attempting)
+      25% match  → 3 + sqrt(0.25)×27 = 3 + 13.5 ≈ 17  (vs linear 7.5 — much fairer)
+      50% match  → 3 + sqrt(0.50)×27 ≈ 22              (vs linear 15)
+      100% match → 30
     """
     matched: List[str] = []
     for kw in keywords:
         if _answer_contains(answer_lower, kw):
             matched.append(kw)
 
-    ratio = len(matched) / max(len(keywords), 1)
-    score = round(ratio * max_score)
-    return score, matched
+    if not keywords:
+        return 0, []
+
+    ratio = len(matched) / len(keywords)
+    floor = max(1, round(max_score * 0.10))   # 10% floor
+    score = floor + math.sqrt(ratio) * (max_score - floor)
+    return round(min(max_score, score)), matched
 
 
 def _score_communication(answer: str) -> Tuple[int, List[str]]:
@@ -476,15 +490,35 @@ def _score_communication(answer: str) -> Tuple[int, List[str]]:
 def _score_project_connection(answer: str) -> Tuple[int, List[str]]:
     """
     Score resume_project_connection — 10 pts max.
-    Looks for first-person project/experience language.
+    Looks for first-person project/experience language across 8 signal categories.
     """
     al = answer.lower()
     patterns = [
-        (r"\b(my project|my app|my application|my system|my service|my api)\b", "project reference"),
-        (r"\b(i built|i developed|i created|i implemented|i shipped|i deployed)\b", "direct experience"),
-        (r"\b(at my (previous|current|last)|in my (previous|current|last))\b", "company context"),
-        (r"\b(we (used|built|deployed|implemented|decided))\b", "team experience"),
-        (r"\b(in production|production environment|real-world)\b", "production context"),
+        # Category 1 — explicit project reference
+        (r"\b(my project|my app|my application|my system|my service|my api|our (app|system|platform|service))\b",
+         "project reference"),
+        # Category 2 — direct build/ship experience
+        (r"\b(i (built|developed|created|implemented|shipped|deployed|wrote|designed|architected|set up))\b",
+         "direct build experience"),
+        # Category 3 — team / company context
+        (r"\b(at my (previous|current|last|former)|in my (previous|current|last|former)|at (work|my company|my team))\b",
+         "company context"),
+        # Category 4 — team collaboration signals
+        (r"\b(we (used|built|deployed|implemented|decided|switched|migrated|chose|went with|ran into|faced|found))\b",
+         "team experience"),
+        # Category 5 — production / real-world context
+        (r"\b(in production|production environment|real.world|live system|customer.facing|end users?)\b",
+         "production context"),
+        # Category 6 — personal experimentation / debugging
+        (r"\b(i (experimented|observed|traced|debugged|profiled|investigated|discovered|noticed|encountered|ran into))\b",
+         "personal debugging"),
+        # Category 7 — codebase references
+        (r"\b(in our codebase|our codebase|our repo|our (database|schema|pipeline|stack)|the codebase)\b",
+         "codebase reference"),
+        # Category 8 — quantified outcomes
+        (r"\b\d+\s*%\s*(improvement|reduction|faster|slower|drop|increase|decrease|gain|saving)\b"
+         r"|\b(reduced|improved|increased|cut|saved|optimised|optimized).{0,30}\b\d+",
+         "quantified outcome"),
     ]
 
     matched: List[str] = []
@@ -492,7 +526,8 @@ def _score_project_connection(answer: str) -> Tuple[int, List[str]]:
         if re.search(pattern, al):
             matched.append(label)
 
-    score = min(len(matched) * 3, 10)
+    # 2 pts per signal, capped at 10
+    score = min(len(matched) * 2, 10)
     return score, matched
 
 
@@ -550,38 +585,50 @@ def score_with_rubric(
 
     hint_map = {
         "Conceptual understanding": (
-            f"Strengthen the theoretical foundation for '{topic}'. "
-            "Name the key concepts, define them, and explain the underlying mechanism."
+            f"To go deeper on '{topic}': name the key mechanisms by name, "
+            "briefly define what they do, and explain why they exist — "
+            "that three-step pattern (name → define → why) is what strong answers look like."
         ),
         "Practical application": (
-            f"Add concrete implementation details for '{topic}'. "
-            "Mention specific tools, libraries, or steps you've used in practice."
+            f"Ground the answer in '{topic}' with a specific tool or step you've actually used. "
+            "Even one sentence like 'In practice I used X to do Y' makes a big difference."
         ),
         "Trade-off depth": (
-            "Discuss the trade-offs explicitly. "
-            "What are the pros and cons? When would you choose an alternative?"
+            "The answer would be stronger with one explicit trade-off: "
+            "what does this approach give up, and when would you pick an alternative? "
+            "Interviewers are specifically listening for that kind of nuance."
         ),
         "Communication structure": (
-            "Structure your answer more clearly. "
-            "Use numbered steps or signal words (first, then, however, because). "
-            "Include at least one concrete example."
+            "Try a simple structure: one sentence of context, one concrete example, "
+            "one trade-off or caveat. Transition words like 'however' or 'specifically' "
+            "signal that kind of structured thinking immediately."
         ),
         "Project connection": (
-            "Connect your answer to real experience. "
-            "Say 'In my project X, I used Y because...' to show practical grounding."
+            "Tie the answer to something you actually built or observed. "
+            "Starting with 'In a project I worked on, we...' or 'I ran into this when...' "
+            "immediately makes the answer more credible and memorable."
         ),
     }
-    improvement_hint = hint_map.get(worst[0], "Deepen the answer with specific examples and trade-off discussion.")
+    improvement_hint = hint_map.get(
+        worst[0],
+        "Add one concrete example and one trade-off — those two additions consistently raise scores the most."
+    )
 
     # ── Interviewer diagnosis ─────────────────────────────────────────────────
     if rubric_total >= 80:
-        diagnosis = f"Strong answer on '{topic}' — conceptual grounding and practical depth both evident."
-    elif rubric_total >= 60:
-        diagnosis = f"Solid foundation on '{topic}', but {worst[0].lower()} needs more depth."
-    elif rubric_total >= 40:
-        diagnosis = f"Partial understanding of '{topic}' — key {worst[0].lower()} is underdeveloped."
+        diagnosis = f"Strong answer on '{topic}' — conceptual grounding and practical depth are both clearly there."
+    elif rubric_total >= 65:
+        diagnosis = f"Good answer on '{topic}'. Solid foundation; {worst[0].lower()} could go a bit further."
+    elif rubric_total >= 45:
+        diagnosis = (
+            f"Decent start on '{topic}'. The candidate shows awareness of the area, "
+            f"but {worst[0].lower()} would benefit from more specificity."
+        )
     else:
-        diagnosis = f"Answer on '{topic}' lacks sufficient depth; needs significant work on core concepts."
+        diagnosis = (
+            f"The answer on '{topic}' establishes a starting point, "
+            f"but needs more depth — particularly on {worst[0].lower()}."
+        )
 
     return {
         "rubric_scores": {

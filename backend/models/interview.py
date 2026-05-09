@@ -33,6 +33,29 @@ class AnswerRecord(BaseModel):
     answer_text: str
     evaluation: EvaluationResult
     answered_at: datetime
+    attempt_number: int = 1
+
+
+# ── Coaching loop models ──────────────────────────────────────────────────────
+
+class ImproveAnswerRequest(BaseModel):
+    session_id: str
+    question_id: str
+    question: str
+    improved_answer: str
+    expected_points: List[str]
+    previous_evaluation: Dict[str, Any]   # EvaluationResult as dict from first attempt
+    attempt_number: int = 2               # 2 = first retry, 3 = second, etc.
+    topic: Optional[str] = None
+
+
+class ImprovedEvaluationResult(EvaluationResult):
+    """EvaluationResult extended with improvement-comparison data."""
+    attempt_number: int = 2
+    previous_scores: Dict[str, int] = {}       # {"technical": 53, "depth": 40, "correctness": 59}
+    improvement_delta: Dict[str, int] = {}     # {"technical": +21, "depth": +18, "correctness": +8}
+    newly_covered: List[str] = []              # concepts covered now that were missing before
+    still_missing: List[str] = []              # concepts still missing after retry
 
 
 class InterviewSession(BaseModel):

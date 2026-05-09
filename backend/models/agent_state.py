@@ -9,7 +9,7 @@ Pydantic models representing the intelligence layer:
   - InterviewPlanResponse: API wrapper for the interview plan
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 
 
@@ -42,6 +42,9 @@ class CandidateState(BaseModel):
     risk_flags: List[str]               # e.g. "Weak on Database Design (2x)"
     last_decision: str                  # last decision_type applied
     next_best_action: str               # suggested next topic to probe
+    answers_answered: int = Field(default=0)            # total answers processed so far
+    concept_gaps: Dict[str, int] = Field(default_factory=dict)   # concept → miss count
+    domain_performance: Dict[str, List[int]] = Field(default_factory=dict)  # topic → [scores]
 
 
 class AgentDecisionTrace(BaseModel):

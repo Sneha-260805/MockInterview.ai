@@ -7,6 +7,7 @@ from models.interview import (
     InterviewSession, EvaluateAnswerRequest, EvaluationResult, AnswerRecord,
     NextQuestionRequest, NextQuestionResponse,
     FinalReportRequest, FinalReport,
+    ImproveAnswerRequest, ImprovedEvaluationResult,
 )
 from models.analysis import ResumeAnalysis
 from agents import interview_orchestrator, evaluator_agent, feedback_agent
@@ -76,6 +77,13 @@ async def start_interview(body: StartInterviewRequest):
     session_dict["candidate_state"] = state_dict
     session_dict["agent_summary"] = agent_summary
     session_dict["decision_traces"] = []
+    # Store resume skills so the orchestrator can generate contextual follow-ups
+    session_dict["resume_techs"] = analysis.skills[:25] if analysis else []
+    # Store project names for personalized question context
+    session_dict["resume_projects"] = (
+        [{"name": p.name, "technologies": p.technologies[:4]} for p in analysis.projects[:3]]
+        if analysis else []
+    )
 
     store.save_session(session.session_id, session_dict)
     if not is_using_memory():
@@ -163,6 +171,130 @@ async def evaluate_answer(body: EvaluateAnswerRequest):
             )
 
     return result
+
+
+# ── Improve answer (coaching loop retry) ─────────────────────────────────────
+
+@router.post("/improve-answer", response_model=ImprovedEvaluationResult)
+async def improve_answer(body: ImproveAnswerRequest):
+    """
+    Re-evaluate an improved answer for an already-answered question.
+
+    Flow:
+      1. Load session and find existing AnswerRecord for question_id.
+      2. Build EvaluateAnswerRequest from improved_answer (same plumbing as evaluate-answer).
+      3. Run evaluator (full pipeline: semantic + rubric).
+      4. Compute delta vs previous_evaluation.
+      5. Update AnswerRecord in session (replace, increment attempt_number).
+      6. Return ImprovedEvaluationResult.
+    """
+    if not body.improved_answer.strip():
+        raise HTTPException(status_code=400, detail="improved_answer cannot be empty.")
+    if body.attempt_number > 3:
+        raise HTTPException(status_code=400, detail="Maximum 2 retries per question.")
+
+    session_data = store.get_session(body.session_id)
+    if not session_data and not is_using_memory():
+        db = get_db()
+        doc = await db["interview_sessions"].find_one({"session_id": body.session_id})
+        if doc:
+            doc.pop("_id", None)
+            session_data = doc
+
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    # Resolve topic from session if not provided
+    topic = body.topic or ""
+    if not topic:
+        for q in session_data.get("questions_asked", []):
+            if q.get("question_id") == body.question_id:
+                topic = q.get("topic", "")
+                break
+
+    # Build evaluation request for improved answer
+    eval_req = EvaluateAnswerRequest(
+        session_id=body.session_id,
+        question_id=body.question_id,
+        question=body.question,
+        answer=body.improved_answer,
+        expected_points=body.expected_points,
+        topic=topic,
+    )
+
+    new_result = await evaluator_agent.evaluate(eval_req)
+
+    # ── Compute improvement delta ─────────────────────────────────────────────
+    prev = body.previous_evaluation
+    prev_tech  = int(prev.get("technical_score",  0))
+    prev_depth = int(prev.get("depth_score",      0))
+    prev_corr  = int(prev.get("correctness_score", 0))
+
+    previous_scores = {
+        "technical":   prev_tech,
+        "depth":       prev_depth,
+        "correctness": prev_corr,
+    }
+    improvement_delta = {
+        "technical":   new_result.technical_score  - prev_tech,
+        "depth":       new_result.depth_score      - prev_depth,
+        "correctness": new_result.correctness_score - prev_corr,
+    }
+
+    # Concepts newly covered vs previously missing
+    prev_missing = set(prev.get("missing_points", []))
+    prev_covered = set(prev.get("covered_points", []))
+    newly_covered = [p for p in new_result.covered_points if p in prev_missing]
+    still_missing = list(new_result.missing_points)
+
+    # ── Update session: replace AnswerRecord, increment attempt_number ────────
+    answers = session_data.get("answers", [])
+    new_record = AnswerRecord(
+        question_id=body.question_id,
+        question=body.question,
+        answer_text=body.improved_answer,
+        evaluation=new_result,
+        answered_at=datetime.now(timezone.utc),
+        attempt_number=body.attempt_number,
+    )
+    answer_dict = new_record.model_dump(mode="json")
+    answer_dict["topic"] = topic
+
+    # Replace existing record for this question_id, or append
+    replaced = False
+    for i, a in enumerate(answers):
+        if a.get("question_id") == body.question_id:
+            answers[i] = answer_dict
+            replaced = True
+            break
+    if not replaced:
+        answers.append(answer_dict)
+
+    session_data["answers"] = answers
+    store.save_session(body.session_id, session_data)
+
+    if not is_using_memory():
+        db = get_db()
+        # Replace or push: use arrayFilters for the update
+        try:
+            await db["interview_sessions"].update_one(
+                {"session_id": body.session_id, "answers.question_id": body.question_id},
+                {"$set": {"answers.$": answer_dict}},
+            )
+        except Exception:
+            await db["interview_sessions"].update_one(
+                {"session_id": body.session_id},
+                {"$push": {"answers": answer_dict}},
+            )
+
+    return ImprovedEvaluationResult(
+        **new_result.model_dump(),
+        attempt_number=body.attempt_number,
+        previous_scores=previous_scores,
+        improvement_delta=improvement_delta,
+        newly_covered=newly_covered,
+        still_missing=still_missing,
+    )
 
 
 # ── Next question ──────────────────────────────────────────────────────────────

@@ -91,16 +91,21 @@ def depth_score(answer: str) -> int:
 
 
 def correctness_score(coverage_ratio: float) -> int:
-    """Estimate technical correctness from keyword coverage (0–95)."""
-    if coverage_ratio >= 0.8:
-        return 82
-    if coverage_ratio >= 0.6:
-        return 68
-    if coverage_ratio >= 0.4:
-        return 52
-    if coverage_ratio >= 0.2:
-        return 36
-    return 20
+    """
+    Estimate technical correctness from semantic concept coverage (0–95).
+
+    Uses a smooth linear mapping instead of a step function to avoid harsh cliffs:
+      0%  coverage → 25   (attempted answer, some credit)
+      25% coverage → 42
+      50% coverage → 59
+      75% coverage → 75
+      100% coverage → 92
+
+    The old step function had 14-pt cliffs (e.g. 0.6→68, 0.4→52).
+    This version rewards every additional concept covered proportionally.
+    """
+    score = 25 + round(coverage_ratio * 67)
+    return max(20, min(95, score))
 
 
 def technical_score_rule_based(coverage_ratio: float, depth: int) -> int:
@@ -121,32 +126,53 @@ def generate_feedback(
     tech: int,
     depth: int,
 ) -> str:
+    """
+    Interviewer-style feedback: constructive, encouraging, competence-oriented.
+    Tone target: supportive senior engineer, not academic grader.
+    """
     n_miss = len(missing)
 
-    if tech >= 75:
-        opening = "Strong answer that demonstrates solid technical understanding."
-    elif tech >= 58:
-        opening = "Good foundational answer with room to go a bit deeper."
-    elif tech >= 40:
-        opening = "The answer shows basic awareness of the topic but lacks important specifics."
+    # ── Opening: performance signal ───────────────────────────────────────────
+    if tech >= 78:
+        opening = "Great answer — you clearly have a strong grasp of this area and covered the key points well."
+    elif tech >= 65:
+        opening = "Good answer. You've got the right foundations and showed solid understanding of the core concepts."
+    elif tech >= 50:
+        opening = "You're on the right track. There's enough here to show real familiarity — the next step is adding more specifics."
+    elif tech >= 35:
+        opening = "The core idea is there. In a real interview, push yourself to go one layer deeper with concrete details or trade-offs."
     else:
-        opening = "The response is directionally correct but needs significantly more depth and detail."
+        opening = "You touched on the general area, but the answer needs more depth. Try explaining the 'why' and walking through a concrete example."
 
+    # ── Middle: coverage gaps (encouraging, not list-heavy) ───────────────────
     if n_miss == 0:
-        middle = "All expected points were covered — excellent thoroughness."
+        middle = "You covered everything expected — that's exactly the level of thoroughness interviewers look for."
     elif n_miss == 1:
-        middle = f"One area to strengthen: '{missing[0]}'."
+        middle = f"One thing worth adding next time: {missing[0]}."
     elif n_miss == 2:
-        middle = f"Consider expanding on '{missing[0]}' and '{missing[1]}'."
+        middle = f"To round it out, try weaving in {missing[0]} and {missing[1]}."
     else:
-        top2 = f"'{missing[0]}' and '{missing[1]}'"
-        middle = f"Key gaps include {top2}, plus {n_miss - 2} other point(s)."
+        top2 = f"{missing[0]} and {missing[1]}"
+        middle = (
+            f"The two highest-impact additions would be: {top2}. "
+            f"{'There are a few other points to address, but those two will move the needle most.' if n_miss > 2 else ''}"
+        ).strip()
 
+    # ── Closing: coaching hint based on depth ────────────────────────────────
     if depth < 35:
-        closing = "Try to include concrete examples and explain the reasoning behind your choices."
+        closing = (
+            "One structural tip: start with the concept, give a concrete example, "
+            "then name one trade-off. That pattern alone will significantly sharpen the answer."
+        )
     elif depth < 60:
-        closing = "Adding specific examples or discussing trade-offs would strengthen the answer further."
+        closing = (
+            "Adding a trade-off or a specific implementation detail would push this "
+            "from solid to impressive."
+        )
     else:
-        closing = "Good level of detail — keep drawing on your real project experience."
+        closing = (
+            "The level of detail and reasoning is strong — "
+            "keep anchoring answers in real project experience like this."
+        )
 
     return f"{opening} {middle} {closing}"
