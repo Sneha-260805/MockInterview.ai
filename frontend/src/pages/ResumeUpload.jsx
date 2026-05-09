@@ -275,16 +275,62 @@ function AnalysisPanel({ analysis, roles }) {
           </Section>
         )}
 
+        {/* Work Experience */}
+        {analysis.work_experience?.length > 0 && (
+          <Section title={`Work Experience (${analysis.work_experience.length} found)`}>
+            <div className="space-y-3">
+              {analysis.work_experience.map((w, i) => (
+                <div key={i} className="bg-gray-50 rounded-xl px-4 py-3">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <p className="font-semibold text-sm text-gray-800">{w.company}</p>
+                    {w.duration && (
+                      <span className="text-xs text-gray-400 shrink-0">{w.duration}</span>
+                    )}
+                  </div>
+                  {w.role && (
+                    <p className="text-xs text-indigo-600 font-medium mt-0.5">{w.role}</p>
+                  )}
+                  {w.responsibilities?.length > 0 && (
+                    <ul className="mt-2 space-y-0.5">
+                      {w.responsibilities.slice(0, 3).map((r, j) => (
+                        <li key={j} className="text-xs text-gray-500 flex items-start gap-1.5">
+                          <span className="text-gray-300 mt-0.5 shrink-0">·</span>
+                          <span className="line-clamp-1">{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+
         {/* Projects */}
         {analysis.projects?.length > 0 && (
           <Section title={`Projects (${analysis.projects.length} found)`}>
             <div className="space-y-3">
               {analysis.projects.map((p) => (
                 <div key={p.name} className="bg-gray-50 rounded-xl px-4 py-3">
-                  <p className="font-semibold text-sm text-gray-800">{p.name}</p>
-                  {p.summary && (
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <p className="font-semibold text-sm text-gray-800">{p.name}</p>
+                    {p.duration && (
+                      <span className="text-xs text-gray-400 shrink-0">{p.duration}</span>
+                    )}
+                  </div>
+                  {/* Show structured description bullets if available, else summary */}
+                  {p.description?.length > 0 ? (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {p.description.slice(0, 3).map((line, i) => (
+                        <li key={i} className="text-xs text-gray-500 flex items-start gap-1.5">
+                          <span className="text-gray-300 mt-0.5 shrink-0">·</span>
+                          <span className="line-clamp-2">{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : p.summary && p.summary !== "No description available." ? (
                     <p className="text-xs text-gray-500 mt-1 line-clamp-2">{p.summary}</p>
-                  )}
+                  ) : null}
                   {p.technologies?.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {p.technologies.map((t) => <Tag key={t} label={t} variant="gray" />)}
@@ -293,6 +339,41 @@ function AnalysisPanel({ analysis, roles }) {
                 </div>
               ))}
             </div>
+          </Section>
+        )}
+
+        {/* Certifications */}
+        {analysis.certifications?.length > 0 && (
+          <Section title={`Certifications (${analysis.certifications.length} found)`}>
+            <div className="space-y-2">
+              {analysis.certifications.map((c, i) => (
+                <div key={i} className="flex items-start justify-between gap-2 bg-green-50 border border-green-100 rounded-xl px-4 py-2.5">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{c.name}</p>
+                    {c.issuer && (
+                      <p className="text-xs text-gray-500 mt-0.5">{c.issuer}</p>
+                    )}
+                  </div>
+                  {c.date && (
+                    <span className="text-xs text-gray-400 shrink-0 mt-0.5">{c.date}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Achievements */}
+        {analysis.achievements?.length > 0 && (
+          <Section title="Achievements & Awards">
+            <ul className="space-y-1.5">
+              {analysis.achievements.map((a, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                  <span className="text-yellow-500 mt-0.5 shrink-0">★</span>
+                  <span>{a}</span>
+                </li>
+              ))}
+            </ul>
           </Section>
         )}
 
