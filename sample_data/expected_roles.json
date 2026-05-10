@@ -1,12 +1,182 @@
 {
-  "candidate_id": "sample-candidate",
+  "candidate_id": "sample-candidate-alex",
+  "total_roles_evaluated": 8,
   "recommended_roles": [
     {
-      "role": "Full Stack Developer",
-      "match_score": 78,
-      "evidence": ["Matched skill: React", "Matched skill: Python"],
-      "interview_focus_areas": ["React & component design", "REST API development", "Database modeling"],
-      "weak_areas_to_probe": ["System design & scalability", "CI/CD pipelines", "Caching strategies"]
+      "rank": 1,
+      "role_id": "backend",
+      "role_name": "Backend Engineer",
+      "match_score": 91,
+      "confidence": "high",
+      "matched_skills": [
+        "Python", "FastAPI", "Flask", "Django",
+        "PostgreSQL", "MongoDB", "Redis",
+        "Docker", "AWS", "GitHub Actions", "REST API",
+        "Microservices", "CI/CD"
+      ],
+      "missing_skills": ["Kubernetes", "Kafka", "gRPC", "Terraform"],
+      "evidence": [
+        "FastAPI + Flask + Django across all three roles",
+        "Led monolith-to-SOA migration at DataStream",
+        "2M events/day ingestion pipeline with async + Redis",
+        "ETL pipeline reducing reconciliation from 6h to 25min"
+      ],
+      "interview_focus_areas": [
+        "REST API design, idempotency, and versioning",
+        "Database schema design and query optimisation",
+        "Distributed systems: retries, circuit breakers, rate limiting",
+        "Async processing and message queuing (Redis, Kafka)",
+        "System design for scalability and reliability"
+      ],
+      "weak_areas_to_probe": [
+        "Kubernetes orchestration — listed as growth area",
+        "gRPC and binary protocol trade-offs",
+        "High-throughput system design beyond 2M events/day",
+        "Observability: tracing, metrics, structured logging"
+      ],
+      "project_deep_dive_topics": [
+        "InterviewCoach AI: adaptive question selection algorithm",
+        "DataStream pipeline: async batch processing implementation",
+        "FinanceFlow: circuit breaker pattern for third-party providers"
+      ]
+    },
+    {
+      "rank": 2,
+      "role_id": "ml_engineer",
+      "role_name": "ML Engineer",
+      "match_score": 74,
+      "confidence": "medium",
+      "matched_skills": [
+        "Python", "scikit-learn", "Pandas", "NumPy",
+        "Hugging Face", "AWS", "Docker", "Flask", "FastAPI"
+      ],
+      "missing_skills": [
+        "PyTorch", "TensorFlow", "Kubernetes",
+        "MLflow", "Spark", "Airflow"
+      ],
+      "evidence": [
+        "Anomaly detection with scikit-learn isolation forests",
+        "BERT model fine-tuning and Flask API serving",
+        "ML Classifier Dashboard project",
+        "Gemini / LLM integration in InterviewCoach AI"
+      ],
+      "interview_focus_areas": [
+        "ML model evaluation and offline vs. online metrics",
+        "Model serving and latency trade-offs",
+        "Feature engineering and pipeline design",
+        "LLM integration patterns and prompt engineering"
+      ],
+      "weak_areas_to_probe": [
+        "Deep learning frameworks (PyTorch / TensorFlow) — minimal evidence",
+        "MLOps tooling: MLflow, DVC, experiment tracking",
+        "Large-scale data processing (Spark, Airflow)"
+      ],
+      "project_deep_dive_topics": [
+        "Isolation forest anomaly detection: feature selection and threshold tuning",
+        "BERT fine-tuning: dataset, training setup, evaluation metrics",
+        "LLM API integration: prompt design and fallback strategy"
+      ]
+    },
+    {
+      "rank": 3,
+      "role_id": "fullstack",
+      "role_name": "Full Stack Developer",
+      "match_score": 72,
+      "confidence": "medium",
+      "matched_skills": [
+        "Python", "JavaScript", "TypeScript", "React",
+        "Node.js", "FastAPI", "Flask", "PostgreSQL",
+        "MongoDB", "Docker", "REST API"
+      ],
+      "missing_skills": [
+        "GraphQL", "Next.js", "Redux", "WebSockets", "React Native"
+      ],
+      "evidence": [
+        "React frontends at WebCraft Agency (5 projects)",
+        "Flask API + React dashboard for ML Classifier",
+        "FastAPI backend + React frontend in InterviewCoach AI"
+      ],
+      "interview_focus_areas": [
+        "Component design, state management, and performance",
+        "REST API design and client-server contract",
+        "Authentication flows (JWT, OAuth)"
+      ],
+      "weak_areas_to_probe": [
+        "React advanced patterns (Context, Suspense, custom hooks)",
+        "Frontend performance and bundle optimisation",
+        "TypeScript typing strategy for complex domains"
+      ],
+      "project_deep_dive_topics": [
+        "InterviewCoach AI: frontend state management between interview turns",
+        "ML Classifier Dashboard: visualisation design decisions"
+      ]
+    },
+    {
+      "rank": 4,
+      "role_id": "devops",
+      "role_name": "DevOps Engineer",
+      "match_score": 61,
+      "confidence": "medium-low",
+      "matched_skills": [
+        "Docker", "Docker Compose", "AWS", "GitHub Actions",
+        "Nginx", "CI/CD", "Linux", "Bash"
+      ],
+      "missing_skills": [
+        "Kubernetes", "Terraform", "Ansible",
+        "Prometheus", "Grafana", "Jenkins"
+      ],
+      "evidence": [
+        "Containerised services with Docker at FinanceFlow",
+        "GitHub Actions CI/CD pipelines",
+        "AWS EC2/S3/Lambda/RDS in multiple projects"
+      ],
+      "interview_focus_areas": [
+        "Docker and container lifecycle management",
+        "CI/CD pipeline design and deployment strategies",
+        "AWS infrastructure and cost optimisation"
+      ],
+      "weak_areas_to_probe": [
+        "Kubernetes — explicitly listed as growth area",
+        "Infrastructure as Code (Terraform, Ansible)",
+        "Monitoring, alerting, and observability tooling"
+      ],
+      "project_deep_dive_topics": [
+        "InterviewCoach AI Docker Compose setup and service orchestration",
+        "FinanceFlow CI/CD pipeline: test, build, deploy stages"
+      ]
+    },
+    {
+      "rank": 5,
+      "role_id": "data_analyst",
+      "role_name": "Data Analyst",
+      "match_score": 55,
+      "confidence": "low-medium",
+      "matched_skills": [
+        "Python", "Pandas", "NumPy", "SQL",
+        "PostgreSQL", "Matplotlib"
+      ],
+      "missing_skills": [
+        "Tableau", "Power BI", "R", "dbt",
+        "Spark", "A/B testing frameworks"
+      ],
+      "evidence": [
+        "ETL pipeline with Pandas reducing reconciliation time 6h → 25min",
+        "scikit-learn anomaly detection project",
+        "ML Classifier Dashboard with visualisation"
+      ],
+      "interview_focus_areas": [
+        "SQL query design and window functions",
+        "Data cleaning and pipeline design with Pandas",
+        "Statistical analysis and metric definition"
+      ],
+      "weak_areas_to_probe": [
+        "BI tooling (Tableau, Power BI) — no evidence",
+        "Statistical testing and experimental design",
+        "Business storytelling with data"
+      ],
+      "project_deep_dive_topics": [
+        "ETL reconciliation pipeline: data quality checks and error handling"
+      ]
     }
   ]
 }

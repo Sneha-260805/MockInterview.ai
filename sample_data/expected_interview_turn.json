@@ -1,22 +1,103 @@
 {
+  "session_id": "sess-sample-alex-backend-001",
+  "role": "Backend Engineer",
+  "question_number": 2,
+  "total_questions": 5,
+
   "question": {
-    "difficulty": "medium",
-    "topic": "API Design",
+    "id": "q-backend-002",
+    "text": "You mentioned leading a migration from a monolithic Django app to a service-oriented architecture at DataStream. Walk me through how you decomposed the monolith — how did you decide which services to extract first, how did you handle shared database state, and what would you do differently now?",
+    "difficulty": "hard",
+    "topic": "System Design",
+    "target_skill": "Distributed Systems / Architecture",
     "generation_mode": "deterministic_dynamic",
-    "expected_concepts": ["idempotency", "versioning", "validation", "error handling"]
-  },
-  "evaluation": {
-    "technical_score": 72,
-    "depth_score": 68,
-    "correctness_score": 68
-  },
-  "decision_trace": {
-    "decision_type": "deeper_follow_up",
-    "signal_scores": {
-      "technical": 72,
-      "communication_clarity": 75,
-      "confidence": 70,
-      "engagement": 65
+    "resume_grounded": true,
+    "expected_concepts": [
+      "strangler fig pattern or incremental decomposition",
+      "service boundary definition (domain-driven design)",
+      "shared database anti-pattern and strategies (schema separation, eventual consistency)",
+      "inter-service communication (REST vs. event-driven)",
+      "deployment and rollback strategy during migration",
+      "observability and distributed tracing across services",
+      "data consistency and transaction management"
+    ],
+    "rubric": {
+      "full_marks": "Discusses decomposition strategy, explains DB state handling with concrete approach, identifies real trade-offs, shows retrospective awareness",
+      "partial_marks": "Describes general steps but vague on DB state or trade-offs",
+      "low_marks": "High-level 'break it into services' answer without specifics"
     }
+  },
+
+  "candidate_answer": "We started by identifying bounded contexts — the ingestion service had completely separate concerns from reporting and user management. We used the strangler fig pattern to extract the ingestion layer first since it was the highest-traffic component and we had the best test coverage there. For the shared database we created separate schemas per service and used an events table as an async bridge for cross-service consistency rather than direct DB joins. We ran both systems in parallel behind a feature flag during cutover. If I were doing it again I'd invest earlier in distributed tracing — we had a painful week where a latency spike was hard to attribute to a specific service.",
+
+  "evaluation": {
+    "technical_score": 84,
+    "depth_score": 79,
+    "correctness_score": 88,
+    "overall_score": 84,
+    "covered_concepts": [
+      "strangler fig pattern",
+      "bounded context identification",
+      "schema separation per service",
+      "async event-driven consistency",
+      "parallel running with feature flag",
+      "distributed tracing (retrospective)"
+    ],
+    "missing_concepts": [
+      "explicit mention of saga pattern for distributed transactions",
+      "inter-service auth / mTLS between services",
+      "specific observability tooling (OpenTelemetry, Jaeger)"
+    ],
+    "evaluation_mode": "deterministic_rubric",
+    "feedback": "Strong answer grounded in real experience. Strangler fig + schema-per-service + async bridge is a mature approach. Good retrospective on observability. Would benefit from mentioning distributed transaction strategies (saga pattern) and inter-service auth."
+  },
+
+  "audio_analysis": {
+    "transcript": "We started by identifying bounded contexts — the ingestion service had completely separate concerns from reporting and user management. We used the strangler fig pattern to extract the ingestion layer first since it was the highest traffic component and we had the best test coverage there. For the shared database we created separate schemas per service and used an events table as an async bridge for cross-service consistency rather than direct DB joins. We ran both systems in parallel behind a feature flag during cutover. If I were doing it again I'd invest earlier in distributed tracing — we had a painful week where a latency spike was hard to attribute to a specific service.",
+    "word_count": 118,
+    "duration_seconds": 52.4,
+    "speaking_rate_wpm": 135,
+    "confidence_score": 78,
+    "communication_clarity_score": 82,
+    "pause_count": 3,
+    "filler_words": 1,
+    "hesitation_count": 2,
+    "hesitation_rate": 0.04,
+    "pitch_proxy": "steady",
+    "tone_proxy": "confident",
+    "metrics_source": "real_whisper"
+  },
+
+  "video_analysis": {
+    "engagement_score": 81,
+    "eye_contact_score": 76,
+    "posture_score": 83,
+    "stress_indicator": "low",
+    "frames_analyzed": 52,
+    "face_detection_rate": 0.94,
+    "avg_center_distance": 0.12,
+    "face_size_stdev": 0.03,
+    "inter_frame_movement": 0.018,
+    "metrics_source": "real_opencv"
+  },
+
+  "multimodal_aggregation": {
+    "technical_score": 84,
+    "communication_clarity_score": 82,
+    "confidence_score": 78,
+    "engagement_score": 81,
+    "role_fit_score": 91,
+    "overall_score": 83,
+    "formula": "0.45×84 + 0.20×82 + 0.15×78 + 0.10×81 + 0.10×91",
+    "behavioral_mode": "multimodal"
+  },
+
+  "adaptation_decision": {
+    "previous_score": 83,
+    "decision_type": "maintain_with_topic_shift",
+    "next_difficulty": "hard",
+    "next_topic": "Database Design & Query Optimisation",
+    "adaptation_reason": "Score 83 (above 80 threshold) — candidate demonstrates strong system design depth. Shifting to database internals to probe PostgreSQL optimisation knowledge, which wasn't covered yet. Maintaining hard difficulty.",
+    "decision_trace": "technical=84 (strong), audio_confidence=78 (good), engagement=81 (high). Topic 'System Design' covered. Next: probe 'Database Design' weak area flagged in resume (query optimisation under load). Difficulty stays HARD."
   }
 }

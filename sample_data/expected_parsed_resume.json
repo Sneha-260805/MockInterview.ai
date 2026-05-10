@@ -1,16 +1,129 @@
 {
-  "candidate_id": "sample-candidate",
-  "skills": ["Python", "FastAPI", "React", "PostgreSQL", "Docker"],
-  "projects": [
+  "candidate_id": "sample-candidate-alex",
+  "mode": "deterministic",
+  "skills": [
+    "Python", "JavaScript", "TypeScript", "SQL", "Bash",
+    "FastAPI", "Flask", "Django", "React", "Node.js", "Express",
+    "PostgreSQL", "MongoDB", "Redis", "SQLite",
+    "AWS", "Docker", "Docker Compose", "GitHub Actions", "Nginx",
+    "scikit-learn", "Pandas", "NumPy", "Matplotlib", "Hugging Face",
+    "Git", "REST API", "Microservices", "CI/CD", "Linux"
+  ],
+  "experience": [
     {
-      "name": "Mock Interview Agent",
-      "technologies": ["Python", "FastAPI", "React"],
-      "summary": "Resume-aware adaptive interview platform."
+      "company": "DataStream Inc",
+      "role": "Senior Software Engineer",
+      "location": "San Francisco, CA",
+      "duration": "Jan 2023 – Present",
+      "duration_months": 28,
+      "highlights": [
+        "Redesigned ingestion pipeline with FastAPI handling 2M events/day; reduced p99 latency 40% using async batch processing and Redis queueing",
+        "Built real-time anomaly detection microservice with scikit-learn isolation forests integrated with PagerDuty",
+        "Led migration from monolithic Django app to SOA across three teams; authored ADRs and ran architecture reviews",
+        "Mentored two junior engineers; introduced code-review standards and pre-commit hooks"
+      ]
+    },
+    {
+      "company": "FinanceFlow",
+      "role": "Software Engineer",
+      "location": "Remote",
+      "duration": "Mar 2021 – Dec 2022",
+      "duration_months": 22,
+      "highlights": [
+        "Developed REST APIs in Flask for portfolio management platform serving 15K users with JWT auth and RBAC",
+        "Integrated third-party data providers with retry logic and circuit breakers",
+        "Built batch ETL pipeline with Pandas/SQLAlchemy; reduced reconciliation time from 6 hours to 25 minutes",
+        "Containerized services with Docker and set up CI/CD via GitHub Actions"
+      ]
+    },
+    {
+      "company": "WebCraft Agency",
+      "role": "Junior Developer",
+      "location": "San Jose, CA",
+      "duration": "Aug 2020 – Feb 2021",
+      "duration_months": 7,
+      "highlights": [
+        "Built and maintained React frontends for five client projects using React Router",
+        "Created reusable component libraries with Storybook",
+        "Optimised PostgreSQL queries by adding indexes and rewriting N+1 patterns"
+      ]
     }
   ],
-  "experience": ["Built APIs and full-stack products."],
-  "experience_level": "mid",
-  "domains": ["Full Stack Web"],
-  "seniority_signals": ["Inferred mid level from resume chronology and role language"],
-  "certifications": []
+  "projects": [
+    {
+      "name": "InterviewCoach AI",
+      "year": "2024",
+      "technologies": ["FastAPI", "React", "Gemini", "faster-whisper", "OpenCV", "MongoDB", "Docker"],
+      "summary": "End-to-end AI interview preparation platform with adaptive question selection, multimodal scoring, and resume-based role inference.",
+      "impact": "Deployed with Docker Compose; supports real-time audio/video analysis with fallback heuristics"
+    },
+    {
+      "name": "PyFlow",
+      "year": "2023",
+      "technologies": ["Python", "pytest", "GitHub Actions"],
+      "summary": "Lightweight Python task-graph library for DAG execution with full test suite and semantic release automation.",
+      "impact": "Used internally by 12 teams at DataStream Inc"
+    },
+    {
+      "name": "ML Classifier Dashboard",
+      "year": "2022",
+      "technologies": ["React", "Flask", "BERT", "AWS EC2", "S3"],
+      "summary": "React dashboard for visualising multi-class classification results backed by a fine-tuned BERT model served via Flask.",
+      "impact": "Deployed on AWS EC2 with S3 for model artifact storage"
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of California, Davis",
+      "degree": "B.S. Computer Science",
+      "graduation_year": 2020,
+      "relevant_coursework": [
+        "Data Structures", "Algorithms", "Databases",
+        "Machine Learning", "Operating Systems", "Computer Networks"
+      ]
+    }
+  ],
+  "certifications": [
+    {
+      "name": "AWS Certified Developer – Associate",
+      "issuer": "Amazon Web Services",
+      "year": 2023
+    },
+    {
+      "name": "MongoDB Associate Developer",
+      "issuer": "MongoDB University",
+      "year": 2022
+    }
+  ],
+  "seniority": {
+    "years_of_experience": 4,
+    "level": "mid-senior",
+    "signals": [
+      "4 years professional experience across 3 companies",
+      "Senior title at most recent role (DataStream)",
+      "Led architecture migrations across 3 teams",
+      "Mentored junior engineers"
+    ]
+  },
+  "domains": [
+    "Backend Engineering",
+    "Data Engineering / ETL",
+    "ML / AI Integration",
+    "DevOps / Cloud",
+    "Full Stack Web"
+  ],
+  "strengths": [
+    "Python backend development (FastAPI, Flask, Django)",
+    "Database design and query optimisation (PostgreSQL, MongoDB, Redis)",
+    "Cloud infrastructure and CI/CD (AWS, Docker, GitHub Actions)",
+    "ML model integration and pipeline building",
+    "System architecture and technical design documentation"
+  ],
+  "weak_areas": [
+    "Kubernetes and container orchestration at scale",
+    "Advanced ML and deep learning (LLM fine-tuning)",
+    "Mobile development (React Native)",
+    "System design for very high throughput (>10M events/day)",
+    "Frontend depth (React used but not primary focus)"
+  ]
 }

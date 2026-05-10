@@ -1,0 +1,37 @@
+Senior Backend / AI Platform Engineer
+Company: DataBridge Labs
+Location: Remote - United States
+
+About the role
+DataBridge Labs is hiring a Senior Backend / AI Platform Engineer to build APIs,
+data pipelines, and ML-enabled product workflows for enterprise analytics teams.
+The engineer will own service design, production reliability, and integration of
+AI features into customer-facing workflows.
+
+Responsibilities
+- Design and implement backend services using Python, FastAPI, and PostgreSQL.
+- Build reliable REST APIs with authentication, authorization, observability, and tests.
+- Integrate ML models and LLM services into production workflows.
+- Improve ingestion pipelines, queueing, caching, and batch/stream processing systems.
+- Collaborate with frontend engineers building React dashboards.
+- Own Docker-based local development and CI/CD deployment pipelines.
+- Write clear technical design documents and explain trade-offs to stakeholders.
+
+Required skills
+- Python, FastAPI, SQL, PostgreSQL, Redis
+- REST API design, authentication, and distributed systems fundamentals
+- Docker, GitHub Actions, cloud deployment experience
+- Strong debugging, testing, and technical communication
+- Experience with ML model serving or LLM API integration
+
+Nice to have
+- AWS, Kubernetes, Kafka, OpenTelemetry
+- React or TypeScript experience
+- Experience mentoring junior engineers
+
+Interview focus areas
+- API design and system decomposition
+- Database schema and query performance
+- Reliability, retries, idempotency, and observability
+- ML/LLM integration trade-offs
+- Communication clarity and confidence under follow-up questions
