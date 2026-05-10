@@ -137,7 +137,6 @@ export default function InterviewRoom() {
 
   // Auto-scroll to evaluation after submit
   const evalRef = useRef(null);
-  const videoMonitorRef = useRef(null);
 
   // ── Load session if not passed via router state ───────────────────────────
   useEffect(() => {
@@ -188,9 +187,6 @@ export default function InterviewRoom() {
     setDecisionTrace(null); // clear trace when submitting new answer
 
     try {
-      const videoData = await videoMonitorRef.current?.finishTurn?.();
-      if (videoData) setVideoResult(videoData);
-
       const result = await evaluateAnswer({
         sessionId:      session.session_id,
         questionId:     activeQuestion.question_id,
@@ -526,17 +522,6 @@ export default function InterviewRoom() {
               </div>
             ) : (
               <div className="p-6 space-y-4">
-                <div>
-                  <VideoRecorder
-                    ref={videoMonitorRef}
-                    sessionId={session?.session_id}
-                    questionNumber={questionNumber}
-                    onResult={(data) => setVideoResult(data)}
-                    disabled={isEvaluating}
-                    autoStart
-                  />
-                </div>
-
                 <textarea
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
