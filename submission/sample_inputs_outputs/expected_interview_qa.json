@@ -1,0 +1,108 @@
+{
+  "_note": "This shows one complete Q/A turn. The question comes from GET /api/interview/start or POST /api/interview/next-question. The evaluation comes from POST /api/interview/evaluate-answer. Audio and video come from POST /api/scoring/audio and /api/scoring/video respectively.",
+
+  "question": {
+    "question_id": "q_backend_auth_002",
+    "question": "Explain how you would design a RESTful API for a user authentication system. Walk through the key components, the token strategy you would choose, and at least two security considerations.",
+    "difficulty": "medium",
+    "topic": "Authentication",
+    "expected_points": [
+      "JWT or session-based tokens",
+      "HTTP methods and endpoint structure (POST /auth/login, POST /auth/register, POST /auth/refresh)",
+      "Refresh token rotation",
+      "Password hashing (bcrypt or argon2)",
+      "Rate limiting on auth endpoints",
+      "HTTPS enforcement",
+      "Token expiry and short-lived access tokens"
+    ],
+    "target_skill": "API Security",
+    "generation_mode": "deterministic_dynamic"
+  },
+
+  "candidate_answer": "I'd use JWT-based authentication. The login endpoint would accept email and password, validate credentials against a hashed password in the database using bcrypt, then return a short-lived access token and a longer-lived refresh token. Access tokens would expire in 15 minutes, and clients use the refresh endpoint to get new ones. I'd also add rate limiting on the login endpoint to prevent brute-force attacks.",
+
+  "evaluation_result": {
+    "technical_score": 72,
+    "depth_score": 68,
+    "correctness_score": 75,
+    "covered_points": [
+      "JWT tokens",
+      "HTTP endpoint structure (login/refresh implied)",
+      "Password hashing with bcrypt",
+      "Short-lived access tokens with expiry",
+      "Rate limiting on auth endpoints"
+    ],
+    "missing_points": [
+      "Refresh token rotation (invalidating old refresh tokens on use)",
+      "HTTPS enforcement mentioned explicitly",
+      "Token storage guidance (httpOnly cookies vs localStorage)"
+    ],
+    "feedback": "Good foundational coverage — JWT, bcrypt, refresh tokens, and rate limiting are all present. To strengthen the answer, mention refresh token rotation (invalidating the old refresh token each time a new one is issued) and explicit HTTPS enforcement. Discussing where to store tokens safely (httpOnly cookies to prevent XSS) would demonstrate production security depth.",
+    "evaluation_mode": "rule_based",
+    "evaluation_provider": "rule_based",
+    "evaluation_source_label": "Rule-based evaluation"
+  },
+
+  "audio_scores": {
+    "status": "ok",
+    "transcript": "I'd use JWT-based authentication. The login endpoint would accept email and password, validate credentials against a hashed password in the database using bcrypt, then return a short-lived access token and a longer-lived refresh token. Access tokens would expire in 15 minutes, and clients use the refresh endpoint to get new ones. I'd also add rate limiting on the login endpoint to prevent brute-force attacks.",
+    "confidence_score": 71,
+    "communication_clarity_score": 78,
+    "pause_count": 3,
+    "speaking_rate": "medium",
+    "words_per_minute": 142.5,
+    "filler_word_count": 0,
+    "filler_words": [],
+    "filler_ratio": 0.0,
+    "hesitation_level": "low",
+    "hesitation_count": 1,
+    "hesitation_rate": 0.013,
+    "pitch_stability": "stable",
+    "pitch_variation_proxy": 62,
+    "analysis_notes": [
+      "Speaking rate is within the 120-160 WPM ideal range",
+      "Low filler word usage — clear and deliberate delivery",
+      "Minimal hesitation detected"
+    ],
+    "mode": "faster_whisper",
+    "word_count": 74,
+    "duration_seconds": 31.2,
+    "pause_rate_per_minute": 5.8,
+    "volume_energy_proxy": 68,
+    "tone_proxy": "neutral",
+    "metrics_source": "whisper_and_heuristics"
+  },
+
+  "video_scores": {
+    "status": "ok",
+    "engagement_score": 80,
+    "framing_score": 72,
+    "stability_score": 85,
+    "movement_activity": "low",
+    "mode": "opencv_mediapipe",
+    "frames_analyzed": 47,
+    "face_detection_rate": 0.94,
+    "analysis_notes": [
+      "Face detected in 94% of frames — strong engagement signal",
+      "Face centred in frame — good eye contact proxy",
+      "Low head movement — stable, composed posture"
+    ],
+    "warning": null,
+    "face_presence": true,
+    "face_presence_score": 94,
+    "eye_contact_proxy": 72,
+    "facial_expression_proxy": "neutral",
+    "posture_proxy": 85,
+    "stress_nervousness_indicator": "low",
+    "nervousness_score": 18,
+    "metrics_source": "opencv_mediapipe"
+  },
+
+  "next_question_response": {
+    "_note": "Returned by POST /api/interview/next-question after this answer is submitted",
+    "reason_for_adaptation": "Score of 72/100 — maintaining medium difficulty. Candidate shows improving grasp of backend concepts; next question will probe Database Design at the same level.",
+    "session_complete": false,
+    "questions_answered": 2,
+    "max_questions": 5
+  }
+}

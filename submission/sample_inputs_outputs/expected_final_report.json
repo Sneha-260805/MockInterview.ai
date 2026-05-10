@@ -1,0 +1,202 @@
+{
+  "_note": "Returned by POST /api/interview/final-report. Field names match the FinalReport Pydantic model exactly. No radar_data or bar_data fields exist in the model — charts are rendered client-side from the individual score fields.",
+
+  "session_id": "sess_alexmorgan_001",
+  "candidate_id": "cand_alexmorgan_001",
+  "candidate_name": "Alex Morgan",
+  "selected_role": "backend_engineer",
+  "generated_at": "2025-05-11T14:32:00.000Z",
+
+  "overall_score": 76,
+  "technical_score": 74,
+  "communication_score": 78,
+  "confidence_score": 70,
+  "engagement_score": 80,
+  "role_fit_score": 84,
+  "behavioral_mode": "multimodal",
+
+  "strengths": [
+    "JWT tokens",
+    "Password hashing with bcrypt",
+    "Redis as shared counter for distributed rate limiting",
+    "Resume strength: REST API design and OpenAPI/Swagger documentation",
+    "Resume strength: Distributed systems and async patterns"
+  ],
+
+  "improvement_areas": [
+    "Refresh token rotation (invalidating old refresh tokens on use)",
+    "HTTPS enforcement mentioned explicitly",
+    "multiprocessing for CPU-bound tasks",
+    "Knowledge gap from resume: Kubernetes and container orchestration at scale",
+    "Knowledge gap from resume: Advanced deep learning and LLM fine-tuning"
+  ],
+
+  "recommended_learning_plan": [
+    {
+      "topic": "Authentication",
+      "resource": "OAuth 2.0 in Action (Manning) + auth0.com developer docs",
+      "reason": "Master token flows, refresh token rotation, and secure storage strategies.",
+      "priority": "high"
+    },
+    {
+      "topic": "API Design",
+      "resource": "API Design Patterns — JJ Geewax (Manning)",
+      "reason": "Idempotency, pagination, versioning, webhooks, and error response design.",
+      "priority": "high"
+    },
+    {
+      "topic": "Concurrency",
+      "resource": "Python Concurrency with asyncio — Matthew Fowler (Manning)",
+      "reason": "asyncio, threading, multiprocessing, and concurrent design patterns.",
+      "priority": "medium"
+    }
+  ],
+
+  "final_feedback": "Alex, you completed the mock interview for the backend_engineer role and demonstrated strong technical proficiency, finishing with an overall score of 76/100. Your background shows excellent alignment with this role (fit score: 84/100), and based on the answers across all topics, you appear ready to compete at this level.\n\nYour strongest moment came on System Design: Rate Limiter (scored 85/100), specifically covering Redis as shared counter and atomic Redis operations. This is exactly the kind of grounded, well-articulated answer that stands out to hiring panels — keep that level of specificity as a benchmark for every topic.\n\nThe area that needs the most attention before your next interview is Async Python (scored 58/100) — particularly multiprocessing for CPU-bound tasks and thread safety. For a backend_engineer role, interviewers treat this as a core competency, so a gap here will surface in every hiring loop. The learning plan below targets it directly.\n\nYour technical knowledge is solid; the next frontier is projecting that knowledge with the same certainty you demonstrate when writing it down. Record yourself answering one question per day — the gap closes quickly.\n\nYour 'InterviewCoach AI' project (built with FastAPI, React) is your strongest interview asset — practise narrating its architecture, your personal contributions, and one specific trade-off decision in under 90 seconds. Start with the top-priority resource in the learning plan below, and then revisit Async Python with a timed practice question. Technical interview performance compounds: consistent deliberate practice over two weeks produces more improvement than a single intensive cram session.",
+
+  "final_feedback_source": "rule_based_fallback",
+
+  "answer_summaries": [
+    {
+      "question_number": 1,
+      "question": "Explain the difference between Python's threading and asyncio models. When would you choose one over the other?",
+      "topic": "Concurrency",
+      "difficulty": "easy",
+      "technical_score": 58,
+      "depth_score": 52,
+      "correctness_score": 60,
+      "covered_points": ["GIL limitation for threading", "asyncio for I/O-bound tasks"],
+      "missing_points": ["multiprocessing for CPU-bound tasks", "thread safety and locks", "event loop mechanics"],
+      "adaptation_reason": null,
+      "audio_transcript": "Threading and asyncio are both ways to handle concurrency in Python. The GIL limits true thread parallelism, so asyncio is better for I/O-bound tasks like web requests where you can await multiple operations.",
+      "audio_confidence": 65,
+      "audio_clarity": 72,
+      "audio_speaking_rate": "medium",
+      "audio_pause_count": 5,
+      "video_engagement": 75,
+      "video_framing": 68,
+      "video_stability": 80,
+      "video_movement": "low"
+    },
+    {
+      "question_number": 2,
+      "question": "Explain how you would design a RESTful API for a user authentication system. Walk through the key components, the token strategy you would choose, and at least two security considerations.",
+      "topic": "Authentication",
+      "difficulty": "medium",
+      "technical_score": 72,
+      "depth_score": 68,
+      "correctness_score": 75,
+      "covered_points": ["JWT tokens", "HTTP endpoint structure (login/refresh implied)", "Password hashing with bcrypt", "Short-lived access tokens with expiry", "Rate limiting on auth endpoints"],
+      "missing_points": ["Refresh token rotation", "HTTPS enforcement", "Token storage strategy (httpOnly cookies vs localStorage)"],
+      "adaptation_reason": "Score of 58/100 on Concurrency — maintaining medium difficulty to probe Authentication, an adjacent backend core competency.",
+      "audio_transcript": "I'd use JWT-based authentication. The login endpoint would accept email and password, validate credentials against a hashed password in the database using bcrypt, then return a short-lived access token and a longer-lived refresh token.",
+      "audio_confidence": 71,
+      "audio_clarity": 78,
+      "audio_speaking_rate": "medium",
+      "audio_pause_count": 3,
+      "video_engagement": 80,
+      "video_framing": 72,
+      "video_stability": 85,
+      "video_movement": "low"
+    },
+    {
+      "question_number": 3,
+      "question": "How do database indexes work and when should you avoid adding them?",
+      "topic": "Database",
+      "difficulty": "medium",
+      "technical_score": 80,
+      "depth_score": 76,
+      "correctness_score": 82,
+      "covered_points": ["B-tree index structure", "Query planner usage", "Write overhead from index maintenance", "Low-cardinality columns should not be indexed", "Index on frequently queried columns"],
+      "missing_points": ["Composite index column ordering (most selective first)", "Partial indexes for filtered queries"],
+      "adaptation_reason": "Score of 72/100 on Authentication — maintaining medium difficulty for Database, core to backend roles.",
+      "audio_transcript": null,
+      "audio_confidence": null,
+      "audio_clarity": null,
+      "audio_speaking_rate": null,
+      "audio_pause_count": null,
+      "video_engagement": 82,
+      "video_framing": 70,
+      "video_stability": 83,
+      "video_movement": "low"
+    },
+    {
+      "question_number": 4,
+      "question": "Design a distributed rate limiter that works across multiple API server instances.",
+      "topic": "System Design",
+      "difficulty": "hard",
+      "technical_score": 85,
+      "depth_score": 82,
+      "correctness_score": 86,
+      "covered_points": ["Redis as shared counter", "Token bucket algorithm", "Sliding window log", "Atomic Redis operations (INCR + EXPIRE)", "Key expiration strategy"],
+      "missing_points": ["Redis cluster failover handling"],
+      "adaptation_reason": "Score of 80/100 on Database exceeded threshold — increasing difficulty to hard for System Design.",
+      "audio_transcript": null,
+      "audio_confidence": null,
+      "audio_clarity": null,
+      "audio_speaking_rate": null,
+      "audio_pause_count": null,
+      "video_engagement": 85,
+      "video_framing": 74,
+      "video_stability": 88,
+      "video_movement": "low"
+    },
+    {
+      "question_number": 5,
+      "question": "What are the main trade-offs between a monolithic architecture and microservices? Describe a scenario where you would choose each.",
+      "topic": "System Design",
+      "difficulty": "hard",
+      "technical_score": 76,
+      "depth_score": 74,
+      "correctness_score": 78,
+      "covered_points": ["Deployment complexity of microservices", "Independent scaling", "Network latency overhead", "Team autonomy in microservices", "Monolith for early-stage startups"],
+      "missing_points": ["Distributed transactions and saga pattern", "Service discovery", "Observability complexity in microservices"],
+      "adaptation_reason": "Score of 85/100 on System Design (Rate Limiter) — maintaining hard difficulty for final System Design question.",
+      "audio_transcript": null,
+      "audio_confidence": null,
+      "audio_clarity": null,
+      "audio_speaking_rate": null,
+      "audio_pause_count": null,
+      "video_engagement": 78,
+      "video_framing": 70,
+      "video_stability": 84,
+      "video_movement": "low"
+    }
+  ],
+
+  "readiness_level": "ready",
+  "best_fit_roles": ["backend_engineer", "Full Stack Developer", "Backend Developer"],
+  "weaker_role_risks": [
+    "Limited depth in 'Kubernetes and container orchestration at scale' may affect performance in roles requiring it",
+    "Limited depth in 'Advanced deep learning and LLM fine-tuning' may affect performance in roles requiring it"
+  ],
+  "skill_mastery_summary": {
+    "Concurrency": 58,
+    "Authentication": 72,
+    "Database": 80,
+    "System Design": 85
+  },
+  "top_3_strengths_with_evidence": [
+    "Demonstrated 'Redis as shared counter' with a score of 85/100",
+    "Demonstrated 'B-tree index structure' with a score of 80/100",
+    "Demonstrated 'JWT tokens' with a score of 72/100"
+  ],
+  "top_3_gaps_with_evidence": [
+    "Missed 'multiprocessing for CPU-bound tasks'",
+    "Missed 'Refresh token rotation' (appeared in 2 answers)",
+    "Missed 'Composite index column ordering (most selective first)'"
+  ],
+  "recommended_7_day_plan": [
+    "Day 1-2: Review core concepts for 'Concurrency' — focus on definitions and examples",
+    "Day 3-4: Build or extend a project that demonstrates Concurrency and Authentication",
+    "Day 5: Practice explaining your projects out loud — use the STAR method (Situation, Task, Action, Result)",
+    "Day 6: Run 2 timed mock questions (15 min each) using the question banks linked below",
+    "Day 7: Record yourself answering one hard question — review audio/video for confidence and clarity"
+  ],
+  "adaptation_summary": [
+    "Q2: Score of 58/100 on Concurrency — maintaining medium difficulty to probe Authentication, an adjacent backend core competency.",
+    "Q3: Score of 72/100 on Authentication — maintaining medium difficulty for Database, core to backend roles.",
+    "Q4: Score of 80/100 on Database exceeded threshold — increasing difficulty to hard for System Design.",
+    "Q5: Score of 85/100 on System Design (Rate Limiter) — maintaining hard difficulty for final System Design question."
+  ]
+}

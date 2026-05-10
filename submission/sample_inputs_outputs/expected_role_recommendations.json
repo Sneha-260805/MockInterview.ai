@@ -1,0 +1,100 @@
+{
+  "candidate_id": "cand_alexmorgan_001",
+  "recommended_roles": [
+    {
+      "role": "fullstack_engineer",
+      "match_score": 88,
+      "rank": 1,
+      "reason": "Strong Python + FastAPI backend paired with React frontend experience and end-to-end Docker deployments makes this the highest-confidence match.",
+      "focus_areas": ["System Design", "REST API Design", "Database Design", "Authentication"],
+      "weak_areas_to_probe": ["GraphQL", "Kubernetes", "SSR/SSG rendering strategies"],
+      "evidence": [
+        "4 years of production Python + FastAPI/Flask/Django backend at DataStream Inc and FinanceFlow",
+        "React frontend demonstrated in InterviewCoach AI and ML Classifier Dashboard projects",
+        "Docker Compose multi-service deployments show full-stack ownership end-to-end"
+      ],
+      "missing_skills": ["Kubernetes", "GraphQL"],
+      "boosted_by": ["Python proficiency", "React + FastAPI combination", "end-to-end project ownership", "CI/CD with GitHub Actions"],
+      "reduced_by": ["No Kubernetes experience", "No GraphQL mentioned"],
+      "confidence": 88,
+      "interview_focus_areas": ["System Design", "REST API Design", "Database Indexing"],
+      "project_deep_dive_areas": ["InterviewCoach AI architecture", "FinanceFlow API design decisions"]
+    },
+    {
+      "role": "backend_engineer",
+      "match_score": 84,
+      "rank": 2,
+      "reason": "High-throughput pipeline design, async patterns, JWT auth, and circuit breakers demonstrate production backend depth across two companies.",
+      "focus_areas": ["API Design", "Database", "Concurrency", "Security", "System Design"],
+      "weak_areas_to_probe": ["Kafka/message queues", "gRPC", "service mesh"],
+      "evidence": [
+        "Redesigned ingestion pipeline handling 2M events/day with 40% p99 latency improvement",
+        "Built anomaly detection microservice and ETL pipelines demonstrating backend system depth",
+        "JWT auth, RBAC, circuit breakers, and async batch processing show production backend maturity"
+      ],
+      "missing_skills": ["Kafka", "gRPC"],
+      "boosted_by": ["FastAPI async patterns", "Redis queuing", "ETL pipeline engineering", "microservices migration leadership"],
+      "reduced_by": ["No Kafka or stream processing experience", "No gRPC"],
+      "confidence": 84,
+      "interview_focus_areas": ["API Design", "Concurrency", "Database"],
+      "project_deep_dive_areas": ["DataStream ingestion pipeline redesign", "FinanceFlow ETL pipeline"]
+    },
+    {
+      "role": "data_engineer",
+      "match_score": 74,
+      "rank": 3,
+      "reason": "ETL pipeline experience and multi-database proficiency (PostgreSQL, MongoDB, Redis) cover the core data engineering toolkit, though stream processing tools are absent.",
+      "focus_areas": ["Pipeline Design", "Data Modelling", "Processing Paradigms", "Data Quality"],
+      "weak_areas_to_probe": ["Apache Spark", "Apache Flink", "dbt", "Airflow"],
+      "evidence": [
+        "Built batch ETL pipeline (pandas + SQLAlchemy) cutting reconciliation time from 6h to 25min",
+        "Streaming ingestion pipeline at DataStream handles 2M events/day",
+        "MongoDB and PostgreSQL proficiency covers document and relational data modelling"
+      ],
+      "missing_skills": ["Apache Spark", "Airflow", "dbt"],
+      "boosted_by": ["pandas ETL experience", "multi-database proficiency", "event-driven ingestion pipeline"],
+      "reduced_by": ["No Spark or Flink", "No orchestration tool (Airflow/Prefect) mentioned"],
+      "confidence": 74,
+      "interview_focus_areas": ["Pipeline Design", "Data Modelling"],
+      "project_deep_dive_areas": ["FinanceFlow ETL reconciliation pipeline"]
+    },
+    {
+      "role": "ml_engineer",
+      "match_score": 68,
+      "rank": 4,
+      "reason": "scikit-learn production usage and BERT fine-tuning show ML integration ability, but absence of deep learning frameworks and MLOps tooling limits this match.",
+      "focus_areas": ["Model Selection", "Practical ML", "Model Serving", "MLOps"],
+      "weak_areas_to_probe": ["PyTorch", "TensorFlow", "MLflow", "model drift detection"],
+      "evidence": [
+        "Built anomaly detection with scikit-learn isolation forests integrated into production microservice",
+        "ML Classifier Dashboard shows end-to-end model serving experience (BERT + Flask API on AWS)",
+        "AWS Certified Developer credential demonstrates cloud deployment capability"
+      ],
+      "missing_skills": ["PyTorch", "TensorFlow", "MLflow", "Kubeflow"],
+      "boosted_by": ["scikit-learn production usage", "BERT fine-tuning and serving", "AWS cloud deployment"],
+      "reduced_by": ["No deep learning framework (PyTorch/TF)", "No MLOps tooling mentioned"],
+      "confidence": 68,
+      "interview_focus_areas": ["Practical ML", "Model Serving"],
+      "project_deep_dive_areas": ["ML Classifier Dashboard design and deployment"]
+    },
+    {
+      "role": "devops_engineer",
+      "match_score": 65,
+      "rank": 5,
+      "reason": "Docker, GitHub Actions CI/CD, AWS, and Nginx are present but Kubernetes, Terraform, and observability tooling are absent.",
+      "focus_areas": ["Kubernetes", "Cloud Architecture", "Observability", "Pipeline Design"],
+      "weak_areas_to_probe": ["Kubernetes scheduling and networking", "Terraform IaC", "Prometheus/Grafana"],
+      "evidence": [
+        "Containerised all services at FinanceFlow and set up CI/CD pipelines with GitHub Actions",
+        "Docker Compose multi-service deployments in personal projects demonstrate infrastructure ownership",
+        "AWS EC2, S3, Lambda, and RDS experience provides a cloud platform foundation"
+      ],
+      "missing_skills": ["Kubernetes", "Terraform", "Prometheus", "Grafana"],
+      "boosted_by": ["Docker and Docker Compose", "GitHub Actions CI/CD", "AWS multi-service experience"],
+      "reduced_by": ["No Kubernetes", "No IaC tooling", "No observability stack mentioned"],
+      "confidence": 65,
+      "interview_focus_areas": ["Kubernetes", "Cloud Architecture"],
+      "project_deep_dive_areas": ["FinanceFlow containerisation and CI/CD setup"]
+    }
+  ]
+}

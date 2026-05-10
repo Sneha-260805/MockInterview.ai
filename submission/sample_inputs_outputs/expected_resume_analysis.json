@@ -1,0 +1,106 @@
+{
+  "candidate_id": "cand_alexmorgan_001",
+  "candidate_name": "Alex Morgan",
+  "email": "alex.morgan@email.com",
+  "phone": "",
+  "experience_level": "senior",
+  "skills": [
+    "Python", "JavaScript", "TypeScript", "SQL", "Bash",
+    "FastAPI", "Flask", "Django", "React", "Node.js", "Express",
+    "PostgreSQL", "MongoDB", "Redis", "SQLite",
+    "AWS", "Docker", "Docker Compose", "GitHub Actions", "Nginx",
+    "scikit-learn", "pandas", "NumPy"
+  ],
+  "domains": ["backend", "fullstack", "data_engineering", "ml_integration"],
+  "education": "B.S. Computer Science — University of California, Davis (2020), GPA 3.7",
+  "projects": [
+    {
+      "name": "InterviewCoach AI",
+      "technologies": ["FastAPI", "React", "Tailwind CSS", "Anthropic Claude", "faster-whisper", "OpenCV", "MediaPipe", "MongoDB", "Docker Compose"],
+      "summary": "End-to-end AI interview preparation platform with adaptive question selection, multimodal scoring via audio and video analysis, and personalised feedback reports.",
+      "duration": "2024",
+      "description": [
+        "FastAPI backend with adaptive question selection; React + Tailwind frontend",
+        "Integrated Anthropic Claude for resume analysis and answer evaluation",
+        "Audio scoring via faster-whisper; video scoring via OpenCV + MediaPipe",
+        "Deployed with Docker Compose; MongoDB + in-memory fallback"
+      ]
+    },
+    {
+      "name": "PyFlow",
+      "technologies": ["Python", "pytest", "GitHub Actions"],
+      "summary": "Lightweight open-source Python task-graph library (DAG execution engine) with 340 GitHub stars and adoption across 12 internal teams at DataStream.",
+      "duration": "2023",
+      "description": [
+        "Lightweight Python task-graph library (DAG execution engine)",
+        "340 GitHub stars; used by 12 teams internally at DataStream",
+        "Full test suite (pytest), CI via GitHub Actions, semantic release automation"
+      ]
+    },
+    {
+      "name": "ML Classifier Dashboard",
+      "technologies": ["React", "Flask", "BERT", "AWS EC2", "S3"],
+      "summary": "React dashboard for visualising multi-class classification results connected to a Flask API serving fine-tuned BERT predictions, deployed on AWS EC2 with S3 for model artefact storage.",
+      "duration": "2022",
+      "description": [
+        "Built a React dashboard for visualising multi-class classification results",
+        "Connected to a Flask API serving predictions from a fine-tuned BERT model",
+        "Deployed on AWS EC2 with S3 for model artefact storage"
+      ]
+    }
+  ],
+  "work_experience": [
+    {
+      "company": "DataStream Inc",
+      "role": "Senior Software Engineer",
+      "duration": "Jan 2023 – Present",
+      "responsibilities": [
+        "Redesigned ingestion pipeline (Python + FastAPI) handling 2M events/day, reducing p99 latency by 40% with async batch processing and Redis queueing",
+        "Built real-time anomaly detection microservice using scikit-learn isolation forests integrated with PagerDuty",
+        "Led migration from monolithic Django app to service-oriented architecture across 3 teams",
+        "Mentored 2 junior engineers; introduced code-review standards and pre-commit hooks"
+      ]
+    },
+    {
+      "company": "FinanceFlow",
+      "role": "Software Engineer",
+      "duration": "Mar 2021 – Dec 2022",
+      "responsibilities": [
+        "Developed REST APIs in Flask for portfolio management platform serving 15k users; implemented JWT auth, RBAC, and audit logging",
+        "Integrated third-party data providers (Plaid, Alpha Vantage) with retry logic and circuit breakers",
+        "Wrote batch ETL pipeline (pandas + SQLAlchemy) reducing reconciliation time from 6h to 25min",
+        "Containerised all services with Docker; set up CI/CD pipelines with GitHub Actions"
+      ]
+    }
+  ],
+  "certifications": [
+    {
+      "name": "AWS Certified Developer – Associate",
+      "issuer": "AWS",
+      "date": "2023"
+    },
+    {
+      "name": "MongoDB Associate Developer",
+      "issuer": "MongoDB",
+      "date": "2022"
+    }
+  ],
+  "achievements": [
+    "Reduced p99 API latency by 40% at DataStream via async batch processing redesign",
+    "Cut ETL reconciliation time from 6 hours to 25 minutes at FinanceFlow",
+    "Maintained open-source PyFlow library with 340 GitHub stars"
+  ],
+  "strengths": [
+    "REST API design and OpenAPI/Swagger documentation",
+    "Distributed systems and async patterns (asyncio, message queues)",
+    "Data pipeline engineering (ETL, streaming ingestion)",
+    "Machine learning integration and model serving",
+    "Technical mentorship and code review"
+  ],
+  "weak_areas": [
+    "Kubernetes and container orchestration at scale",
+    "Advanced deep learning and LLM fine-tuning",
+    "Mobile development (React Native)",
+    "System design for high-throughput (>10M RPS) workloads"
+  ]
+}

@@ -1,0 +1,51 @@
+Job Title: Mid-Level Full-Stack Engineer
+Company: TechNova Inc.
+Location: Austin, TX (Hybrid — 3 days/week on-site)
+Employment Type: Full-Time
+
+About TechNova:
+TechNova builds data-driven SaaS products for the healthcare logistics industry. Our platform
+processes millions of shipment events per day and surfaces real-time analytics to hospital
+procurement teams. We move fast, deploy daily, and care deeply about code quality.
+
+Role Overview:
+We are looking for a motivated Mid-Level Full-Stack Engineer to join our 12-person engineering
+team. You will own features end-to-end — from designing the API contract and database schema
+to building the React UI and writing the deployment configuration. You will collaborate closely
+with product designers, data engineers, and customer success to ship software that directly
+impacts patient care.
+
+Responsibilities:
+- Design, build, and maintain RESTful APIs using Python (FastAPI or Django REST Framework)
+- Develop responsive, accessible React frontends using TypeScript and Tailwind CSS
+- Write and optimise SQL queries against PostgreSQL; model schemas for new product features
+- Containerise services with Docker and contribute to CI/CD pipelines (GitHub Actions)
+- Participate in code reviews, architecture discussions, and on-call rotation (1 week/quarter)
+- Instrument code with logging and metrics; investigate and resolve production incidents
+- Collaborate with data engineers to surface insights via internal dashboards
+
+Required Skills:
+- Python (3.9+): FastAPI or Django, async patterns, pytest
+- React (17+): hooks, context API, component design, React Router
+- REST API design: OpenAPI/Swagger, JSON:API or similar conventions
+- SQL / PostgreSQL: joins, indexing, query optimisation
+- Docker: multi-stage builds, docker-compose for local dev
+- Git: branching strategies, PR-based workflow, code review
+
+Nice-to-Have:
+- AWS experience: EC2, S3, Lambda, RDS, or CloudWatch
+- Kubernetes / Helm for container orchestration
+- Machine learning integration: serving scikit-learn or ONNX models via API
+- Redis for caching or queuing (Celery, RQ)
+- TypeScript proficiency
+
+What We Offer:
+- Competitive salary: $110,000 – $140,000 DOE
+- Fully covered health, dental, and vision insurance
+- $2,000/year learning & development budget
+- Flexible PTO (minimum 15 days encouraged)
+- Home office stipend for remote-friendly setup
+
+To Apply:
+Submit your resume and a brief cover letter explaining a technical challenge you solved and
+how you approached it. Applications reviewed on a rolling basis.
