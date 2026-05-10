@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 async def _llm_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
+    if not settings.has_llm_configured:
+        logger.info("LLM evaluation skipped (no provider configured); using rule-based fallback.")
         return None
     provider = (
         "gemini"
@@ -60,12 +61,18 @@ async def _llm_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult | None:
 
         raw = await call_llm(prompt, max_tokens=600)
         if raw is None:
-            return None
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        if not m:
+            logger.info("LLM evaluation returned no response; using rule-based fallback.")
             return None
 
-        data = json.loads(m.group(0))
+        from services.llm_client import extract_json
+        data = extract_json(raw)
+        if not data:
+            logger.warning(
+                "LLM evaluation: could not parse JSON from response (len=%d, tail=%s); "
+                "using rule-based fallback.",
+                len(raw), raw[-120:],
+            )
+            return None
 
         # Validate covered/missing against actual expected_points list
         valid = set(req.expected_points)
@@ -94,6 +101,7 @@ async def _llm_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult | None:
             evaluation_mode="ai",
             evaluation_provider=provider,
             evaluation_source_label=f"AI evaluation ({provider})",
+            evaluation_source=f"llm:{settings.llm_provider.lower()}",
         )
 
     except Exception as exc:
@@ -221,6 +229,7 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
         evaluation_mode="rule_based",
         evaluation_provider="rule_based",
         evaluation_source_label="Rule-based evaluation",
+        evaluation_source="rule_based_fallback",
     )
 
 

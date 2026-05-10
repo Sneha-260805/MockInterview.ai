@@ -94,6 +94,23 @@ async def start_interview(body: StartInterviewRequest):
         [{"name": p.name, "technologies": p.technologies[:4]} for p in analysis.projects[:3]]
         if analysis else []
     )
+    # Store the best-fit project's domain so the orchestrator can keep
+    # subsequent LLM questions on-role (avoids ML questions in Full Stack sessions)
+    best_project_domain = ""
+    if analysis and analysis.projects:
+        try:
+            from services.project_classifier import select_best_project
+            best_proj, _sc, _all = select_best_project(
+                analysis.projects, session.selected_role
+            )
+            if best_proj is not None:
+                proj_domain = getattr(
+                    getattr(best_proj, "domain", None), "primary_domain", ""
+                )
+                best_project_domain = proj_domain or ""
+        except Exception:
+            pass
+    session_dict["best_project_domain"] = best_project_domain
 
     store.save_session(session.session_id, session_dict)
     if not is_using_memory():

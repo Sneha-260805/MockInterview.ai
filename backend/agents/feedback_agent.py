@@ -605,7 +605,7 @@ async def _llm_feedback(
 ) -> str | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
+    if not settings.has_llm_configured:
         return None
     try:
         from services.llm_client import call_llm
@@ -907,6 +907,7 @@ async def generate_report(
     final_feedback = await _llm_feedback(
         session_data, analysis, role, scores_dict, strengths, improvements
     )
+    final_feedback_source = "rule_based_fallback"
     if not final_feedback:
         final_feedback = _rule_feedback(
             tech, comm, conf, eng, role_fit, overall, role, strengths, improvements,
@@ -914,6 +915,9 @@ async def generate_report(
             analysis=analysis,
             audio_scores=audio_scores,
         )
+    else:
+        from config import get_settings
+        final_feedback_source = f"llm:{get_settings().llm_provider.lower()}"
 
     # ── Answer summaries ──────────────────────────────────────────────────────
     # adaptation_log[i] is why question i+2 was chosen
@@ -1000,6 +1004,7 @@ async def generate_report(
         improvement_areas=improvements,
         recommended_learning_plan=learning_plan,
         final_feedback=final_feedback,
+        final_feedback_source=final_feedback_source,
         answer_summaries=answer_summaries,
         **diagnostic,
     )

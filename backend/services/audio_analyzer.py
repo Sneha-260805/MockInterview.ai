@@ -26,11 +26,11 @@ Optional pitch analysis:
   pip install librosa            ← enables pitch stability detection
 """
 
+import asyncio
 import logging
 import os
 import random
 import re
-import asyncio
 import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -615,6 +615,10 @@ async def analyze(file_bytes: bytes, filename: str = "audio.webm") -> dict:
     Accepts raw audio bytes, writes to a temp file, analyses, cleans up.
     Always returns a dict matching AudioAnalysisResponse fields.
     Falls back gracefully if the Whisper engine fails at runtime.
+
+    Whisper inference is CPU-bound and synchronous.  We offload it to the
+    default ThreadPoolExecutor so the FastAPI event loop is never blocked,
+    which allows audio + video to run concurrently via asyncio.gather().
     """
     if _ENGINE == "fallback":
         return _analyze_fallback(file_bytes)

@@ -42,6 +42,7 @@ Average session: 50–70
 Strong session:  75–90
 """
 
+import asyncio
 import logging
 import math
 import os
@@ -529,6 +530,11 @@ async def analyze(file_bytes: bytes, filename: str = "capture.webm") -> dict:
     Writes to a temp file only when cv2 is available to extract frames.
     Always cleans up the temp file.
     Falls back gracefully if any engine step fails.
+
+    OpenCV frame extraction and MediaPipe inference are CPU-bound and
+    synchronous.  Both are offloaded to the default ThreadPoolExecutor so
+    the FastAPI event loop stays free, enabling audio + video to run truly
+    in parallel via asyncio.gather().
     """
     ext      = Path(filename).suffix.lower()
     is_image = ext in _IMAGE_EXTENSIONS
@@ -543,20 +549,27 @@ async def analyze(file_bytes: bytes, filename: str = "capture.webm") -> dict:
         tmp.flush()
         tmp.close()
 
+        loop = asyncio.get_event_loop()
+
         if is_image:
+            # _bytes_to_frame is fast — no need to offload
             frame  = _bytes_to_frame(file_bytes)
             frames = [frame] if frame is not None else []
         else:
-            frames = _extract_frames(tmp.name, max_frames=30)
+            # Frame extraction reads the whole video — offload to thread pool
+            frames = await loop.run_in_executor(
+                None, lambda: _extract_frames(tmp.name, max_frames=30)
+            )
 
         if not frames:
             logger.warning("Video analyser: no frames extracted — using fallback.")
             return _analyze_fallback(file_bytes, is_image)
 
+        # Face detection / scoring — offload heavy inference to thread pool
         if _MP_AVAILABLE:
-            return _analyze_opencv_mediapipe(frames)
+            return await loop.run_in_executor(None, _analyze_opencv_mediapipe, frames)
         else:
-            return _analyze_opencv(frames)
+            return await loop.run_in_executor(None, _analyze_opencv, frames)
 
     except Exception as exc:
         logger.warning(

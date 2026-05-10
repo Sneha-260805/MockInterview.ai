@@ -75,6 +75,7 @@ async def upload_resume(file: UploadFile = File(...)):
 class AnalyzeResponse(BaseModel):
     analysis: ResumeAnalysis
     roles: RoleRecommendationResponse
+    llm_enhancement_source: str = "rule_based_fallback"
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -86,6 +87,7 @@ async def analyze_resume(body: AnalyzeRequest):
 
     # Optional LLM enhancement — merges improved fields if available
     enhanced = await enhance_analysis(body.raw_text, analysis.model_dump())
+    llm_enhancement_source = "rule_based_fallback"
     if enhanced:
         merged = {**analysis.model_dump(), **{
             k: v for k, v in enhanced.items()
@@ -93,6 +95,8 @@ async def analyze_resume(body: AnalyzeRequest):
         }}
         merged["candidate_id"] = body.candidate_id  # never override
         analysis = ResumeAnalysis(**merged)
+        from config import get_settings
+        llm_enhancement_source = f"llm:{get_settings().llm_provider.lower()}"
 
     roles = role_agent.recommend(analysis)
 
@@ -109,4 +113,8 @@ async def analyze_resume(body: AnalyzeRequest):
             {"candidate_id": body.candidate_id}, roles.model_dump(), upsert=True
         )
 
-    return AnalyzeResponse(analysis=analysis, roles=roles)
+    return AnalyzeResponse(
+        analysis=analysis,
+        roles=roles,
+        llm_enhancement_source=llm_enhancement_source,
+    )

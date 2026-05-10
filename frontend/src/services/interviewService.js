@@ -126,3 +126,37 @@ export async function analyzeAudio({ audioBlob, sessionId, questionNumber }) {
   });
   return response.data; // AudioAnalysisResponse
 }
+
+/**
+ * Upload BOTH audio and video in a single request so the backend can
+ * analyse them in parallel (asyncio.gather) instead of sequentially.
+ *
+ * This avoids the event-loop-blocking race condition that caused timeouts
+ * when AudioRecorder and VideoRecorder each POSTed independently.
+ *
+ * @param {Blob}   audioBlob        - audio Blob from AudioRecorder
+ * @param {Blob}   videoBlob        - video Blob or JPEG snapshot from VideoRecorder
+ * @param {string} [videoFilename]  - "capture.webm" | "frame.jpg" etc.
+ * @param {string} [sessionId]
+ * @param {number} [questionNumber]
+ * @returns {Promise<{ audio: AudioAnalysisResponse, video: VideoAnalysisResponse }>}
+ */
+export async function analyzeMediaCombined({
+  audioBlob,
+  videoBlob,
+  videoFilename = "capture.webm",
+  sessionId,
+  questionNumber,
+}) {
+  const form = new FormData();
+  form.append("audio", audioBlob, "answer.webm");
+  form.append("video", videoBlob, videoFilename);
+  if (sessionId)              form.append("session_id",      sessionId);
+  if (questionNumber != null) form.append("question_number", String(questionNumber));
+
+  const response = await api.post("/api/scoring/combined", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: MEDIA_ANALYSIS_TIMEOUT_MS,
+  });
+  return response.data; // { audio: AudioAnalysisResponse, video: VideoAnalysisResponse }
+}

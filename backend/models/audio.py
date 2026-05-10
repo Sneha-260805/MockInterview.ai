@@ -20,14 +20,18 @@ class AudioAnalysisResponse(BaseModel):
     words_per_minute: Optional[float] = None
 
     # Filler-word analysis
-    filler_word_count: Optional[int] = None
+    filler_word_count: int = 0
+    filler_words: List[str] = Field(default_factory=list)
     filler_ratio: Optional[float] = None       # 0.0–1.0
 
     # Hesitation classification
     hesitation_level: Optional[str] = None    # "low" | "moderate" | "high"
+    hesitation_count: int = 0
+    hesitation_rate: Optional[float] = None
 
     # Pitch analysis (librosa; "unavailable" when librosa not installed)
     pitch_stability: Optional[str] = None     # "stable" | "variable" | "monotone" | "unavailable"
+    pitch_variation_proxy: Optional[int] = None
 
     # Plain-English explainability notes
     analysis_notes: List[str] = Field(default_factory=list)
@@ -36,12 +40,7 @@ class AudioAnalysisResponse(BaseModel):
     mode: str                                  # "faster_whisper" | "whisper" | "fallback"
     word_count: Optional[int] = None
     duration_seconds: Optional[float] = None
-    filler_word_count: int = 0
-    filler_words: list[str] = []
-    hesitation_count: int = 0
-    hesitation_rate: Optional[float] = None
     pause_rate_per_minute: Optional[float] = None
-    pitch_variation_proxy: Optional[int] = None
     volume_energy_proxy: Optional[int] = None
     tone_proxy: str = "unknown"
     metrics_source: str = "heuristic"

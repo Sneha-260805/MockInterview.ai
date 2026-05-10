@@ -33,6 +33,7 @@ class EvaluationResult(BaseModel):
     evidence: Optional[List[str]] = None             # matched concepts
     improvement_hint: Optional[str] = None           # targeted coaching tip
     interviewer_diagnosis: Optional[str] = None      # 1-sentence diagnosis
+    evaluation_source: Optional[str] = None          # "llm:gemini" | "rule_based_fallback"
 
 
 class AnswerRecord(BaseModel):
@@ -182,6 +183,7 @@ class FinalReport(BaseModel):
     improvement_areas: List[str]
     recommended_learning_plan: List[LearningItem]
     final_feedback: str
+    final_feedback_source: Optional[str] = None      # "llm:gemini" | "rule_based_fallback"
 
     # ── Per-question breakdown ────────────────────────────────────────────────
     answer_summaries: List[AnswerSummary]

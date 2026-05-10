@@ -21,13 +21,15 @@ python-docx>=1.1.0         # DOCX resume support (.docx files)
 # Set USE_LLM=true in .env and provide ONE of the keys below.
 anthropic==0.34.2          # Claude - set LLM_PROVIDER=anthropic
 google-genai>=1.0.0        # Gemini - set LLM_PROVIDER=gemini + GEMINI_API_KEY
+openai>=1.0.0              # Grok/xAI — set LLM_PROVIDER=grok
+google-generativeai>=0.8.3 # fallback Gemini SDK
 
 # Audio transcription (optional)
 # Without Whisper, audio scoring uses a conservative file-size heuristic.
-faster-whisper
-librosa
-soundfile
-ffmpeg-python
+faster-whisper==1.0.3
+librosa==0.10.2.post1
+soundfile==0.12.1
+ffmpeg-python==0.2.0
 
 # Video analysis (optional)
 # Real face detection via OpenCV + MediaPipe.

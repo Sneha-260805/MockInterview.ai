@@ -143,7 +143,7 @@ async def _llm_question(
 ) -> Question | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
+    if not settings.has_llm_configured:
         return None
     try:
         from services.llm_client import call_llm

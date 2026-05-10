@@ -35,17 +35,20 @@ _SKILL_LIST = [
     "Terraform", "Ansible", "Prometheus", "Grafana", "Nginx",
     "CI/CD", "Linux", "Bash",
     # ML / AI
-    "TensorFlow", "PyTorch", "Keras", "Scikit-learn", "XGBoost",
+    "TensorFlow", "PyTorch", "Keras", "Scikit-learn", "XGBoost", "LightGBM",
     "Pandas", "NumPy", "Matplotlib", "Seaborn",
     "Machine Learning", "Deep Learning", "NLP", "Computer Vision",
     "OpenCV", "Hugging Face", "LangChain", "LLM",
+    "MLflow", "Weights & Biases",
     # Data Engineering
     "Spark", "Hadoop", "Airflow", "Kafka", "dbt", "Snowflake", "Databricks",
-    "Tableau", "Power BI", "Looker", "R",
+    "BigQuery", "Redshift", "Tableau", "Power BI", "Looker", "R",
     # Mobile
-    "iOS", "Android", "React Native", "Flutter", "Swift", "Xamarin",
+    "iOS", "Android", "React Native", "Flutter", "Swift", "Kotlin", "Xamarin",
     # Testing
-    "Jest", "Pytest", "JUnit", "Selenium", "Cypress", "Playwright",
+    "Jest", "Pytest", "JUnit", "Selenium", "Cypress", "Playwright", "Postman",
+    # Security / Auth
+    "OAuth", "JWT",
     # General
     "Git", "GitHub", "REST API", "GraphQL", "gRPC", "Microservices",
     "Agile", "Scrum", "JIRA", "Figma",
@@ -1114,6 +1117,15 @@ def analyze(raw_text: str, candidate_id: str) -> ResumeAnalysis:
 
     skills         = _extract_skills(raw_text)
     projects       = _extract_projects(raw_text, sections)
+
+    # Classify each project's primary domain for role-aware selection later
+    try:
+        from services.project_classifier import classify_project
+        for proj in projects:
+            proj.domain = classify_project(proj)
+    except Exception:
+        pass  # domain stays None; selection falls back to projects[0]
+
     certifications = _extract_certifications(sections)
     achievements   = _extract_achievements(sections)
     work_exp       = _extract_work_experience(sections)

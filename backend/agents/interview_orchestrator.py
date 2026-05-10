@@ -548,7 +548,15 @@ def _build_static(analysis: ResumeAnalysis, role: str) -> Question:
     skill_str = ", ".join(analysis.skills[:5]) if analysis.skills else "your listed technologies"
 
     if analysis.projects and "project" in bank:
+        # Select project most relevant to the target role
         p = analysis.projects[0]
+        try:
+            from services.project_classifier import select_best_project
+            best, _score, _all = select_best_project(analysis.projects, role)
+            if best is not None:
+                p = best
+        except Exception:
+            pass
         tech_str = ", ".join(p.technologies[:3]) if p.technologies else skill_str
         tmpl = bank["project"]
         return Question(
@@ -578,32 +586,76 @@ def _build_static(analysis: ResumeAnalysis, role: str) -> Question:
 async def _generate_first_with_llm(analysis: ResumeAnalysis, role: str) -> Question | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
+    if not settings.has_llm_configured:
         return None
     try:
-        from services.llm_client import call_llm
+        from services.llm_client import call_llm, extract_json
         p_line = ""
+        domain_focus = ""
+        avoid_domains = ""
         if analysis.projects:
+            # Pick the project most relevant to the target role
             p = analysis.projects[0]
-            p_line = f"Most prominent project: '{p.name}' using {', '.join(p.technologies[:3])}."
+            try:
+                from services.project_classifier import select_best_project, _ROLE_DOMAIN_AFFINITY
+                best, _score, _all = select_best_project(analysis.projects, role)
+                if best is not None:
+                    p = best
+            except Exception:
+                pass
+
+            tech_str = ", ".join(p.technologies[:3]) if p.technologies else ""
+            p_line = f"Most relevant project for this role: '{p.name}' using {tech_str}."
+
+            # Add domain-focus hints so the LLM doesn't ask off-topic questions
+            proj_domain = getattr(getattr(p, "domain", None), "primary_domain", "")
+            if proj_domain and proj_domain != "General Software":
+                domain_focus = f"Project primary domain: {proj_domain}."
+                affinity = {}
+                try:
+                    from services.project_classifier import _ROLE_DOMAIN_AFFINITY
+                    affinity = _ROLE_DOMAIN_AFFINITY.get(role, {})
+                except Exception:
+                    pass
+                irrelevant = [d for d, w in affinity.items() if w < 0.20 and d != proj_domain]
+                if irrelevant:
+                    avoid_domains = (
+                        f"IMPORTANT: Focus on {role} aspects of this project. "
+                        f"Do NOT ask questions about {', '.join(irrelevant[:3])} — "
+                        f"those are not relevant to this interview role."
+                    )
+
         prompt = (
             f"You are a warm senior technical interviewer opening a mock interview.\n\n"
-            f"Role: {role}\nSkills: {', '.join(analysis.skills[:12])}\nLevel: {analysis.experience_level}\n{p_line}\n\n"
+            f"Role: {role}\nSkills: {', '.join(analysis.skills[:12])}\nLevel: {analysis.experience_level}\n"
+            f"{p_line}\n{domain_focus}\n{avoid_domains}\n\n"
             "Generate the FIRST interview question. Rules: difficulty='easy', reference project if listed, open-ended.\n"
-            'Return ONLY JSON: {"question":"...","topic":"...","expected_points":["...","...","...","..."]}'
+            'Return ONLY JSON (no markdown, no prose): '
+            '{"question":"...","topic":"...","expected_points":["...","...","...","..."]}'
         )
         raw = await call_llm(prompt, max_tokens=512)
         if raw is None:
             return None
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        if m:
-            data = json.loads(m.group(0))
-            return Question(
-                question_id=_qid(), question=data["question"], difficulty="easy",
-                topic=data.get("topic", "Role Introduction"), expected_points=data.get("expected_points", []),
-            )
+
+        data = extract_json(raw)
+        if not data:
+            logger.warning("LLM first-question: could not parse JSON from response (len=%d)", len(raw))
+            return None
+
+        question_text = data.get("question", "").strip()
+        if not question_text:
+            logger.warning("LLM first-question: parsed JSON missing 'question' key. data=%s", data)
+            return None
+
+        return Question(
+            question_id=_qid(),
+            question=question_text,
+            difficulty="easy",
+            topic=data.get("topic", "Role Introduction") or "Role Introduction",
+            expected_points=data.get("expected_points") or [],
+        )
     except Exception as exc:
-        logger.warning("LLM first-question failed: %s", exc)
+        logger.warning("LLM first-question failed: %s: %s", type(exc).__name__, exc)
     return None
 
 
@@ -615,6 +667,7 @@ async def start_session(
     if analysis:
         first_q = await _generate_first_with_llm(analysis, selected_role)
     if first_q is None:
+        logger.info("First interview question source: static_fallback.")
         first_q = _build_static(
             analysis or ResumeAnalysis(
                 candidate_id=candidate_id, candidate_name="", email="", phone="",
@@ -623,6 +676,9 @@ async def start_session(
             ),
             selected_role,
         )
+    else:
+        from config import get_settings
+        logger.info("First interview question source: llm:%s.", get_settings().llm_provider.lower())
     session = InterviewSession(
         session_id=session_id, candidate_id=candidate_id, selected_role=selected_role,
         status="active", created_at=datetime.now(timezone.utc),
@@ -725,14 +781,25 @@ async def _generate_next_with_llm(
 ) -> Question | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
+    if not settings.has_llm_configured:
         return None
     try:
-        from services.llm_client import call_llm
+        from services.llm_client import call_llm, extract_json
         questions_summary = [
             f"Q{i+1}: [{q['topic']}] {q['question'][:60]}…"
             for i, q in enumerate(session_data.get("questions_asked", []))
         ]
+        # Include project-domain context so the LLM stays on-role
+        # best_project_domain is stored at session-start time by interview_routes
+        project_context = ""
+        proj_domain = session_data.get("best_project_domain", "")
+        if proj_domain and proj_domain != "General Software":
+            project_context = (
+                f"Candidate's primary project domain: {proj_domain}. "
+                f"Ensure questions stay relevant to the {role} role — "
+                f"do not pivot to unrelated technical areas."
+            )
+
         prompt = (
             f"You are an adaptive technical interviewer. Generate the NEXT interview question.\n\n"
             f"Role: {role}\n"
@@ -741,24 +808,34 @@ async def _generate_next_with_llm(
             f"Target difficulty: {target_diff}\n"
             f"Topics already covered: {list(covered_topics)}\n"
             f"Questions asked so far:\n" + "\n".join(questions_summary) + "\n"
-            f"Last answer excerpt: \"{last_answer[:300]}\"\n\n"
-            "Return ONLY valid JSON:\n"
+            f"Last answer excerpt: \"{last_answer[:300]}\"\n"
+            f"{project_context}\n\n"
+            "Return ONLY valid JSON (no markdown, no prose):\n"
             '{"question":"...","difficulty":"easy|medium|hard","topic":"...","expected_points":["...","...","..."]}'
         )
         raw = await call_llm(prompt, max_tokens=512)
         if raw is None:
             return None
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        if m:
-            data = json.loads(m.group(0))
-            return Question(
-                question_id=_qid(), question=data["question"],
-                difficulty=data.get("difficulty", target_diff),
-                topic=data.get("topic", req.current_topic),
-                expected_points=data.get("expected_points", []),
-            )
+
+        data = extract_json(raw)
+        if not data:
+            logger.warning("LLM next-question: could not parse JSON from response (len=%d)", len(raw))
+            return None
+
+        question_text = data.get("question", "").strip()
+        if not question_text:
+            logger.warning("LLM next-question: parsed JSON missing 'question' key. data=%s", data)
+            return None
+
+        return Question(
+            question_id=_qid(),
+            question=question_text,
+            difficulty=data.get("difficulty") or target_diff,
+            topic=data.get("topic") or req.current_topic,
+            expected_points=data.get("expected_points") or [],
+        )
     except Exception as exc:
-        logger.warning("LLM next-question failed: %s", exc)
+        logger.warning("LLM next-question failed: %s: %s", type(exc).__name__, exc)
     return None
 
 
@@ -846,7 +923,11 @@ async def next_question(
     )
 
     if next_q is None:
+        logger.info("Next interview question source: question_bank_fallback.")
         next_q = _select_question(role, target_diff, covered_topics, asked_ids)
+    else:
+        from config import get_settings
+        logger.info("Next interview question source: llm:%s.", get_settings().llm_provider.lower())
 
     if next_q is None:
         # Ultimate fallback — a generic deeper probe

@@ -3,8 +3,7 @@ import { useParams, useLocation, Link, useNavigate } from "react-router-dom";
 import QuestionPanel from "../components/QuestionPanel";
 import EvaluationPanel from "../components/EvaluationPanel";
 import AdaptationBadge from "../components/AdaptationBadge";
-import AudioRecorder from "../components/AudioRecorder";
-import VideoRecorder from "../components/VideoRecorder";
+import InterviewMonitor from "../components/InterviewMonitor";
 import InterviewPlanTimeline from "../components/InterviewPlanTimeline";
 import AgentTracePanel from "../components/AgentTracePanel";
 import { CandidateStatePanel } from "../components/SkillMasteryMap";
@@ -490,6 +489,18 @@ export default function InterviewRoom() {
             <QuestionPanel question={activeQuestion} index={questionNumber} />
           )}
 
+          {/* Interview Monitor — placed here so webcam + controls sit directly
+              between the question and the answer textarea, eliminating the
+              eye-travel problem of having the monitor in a distant sidebar. */}
+          <InterviewMonitor
+            sessionId={session?.session_id}
+            questionNumber={questionNumber}
+            onTranscript={(text) => setAnswer((prev) => prev || text)}
+            onAudioResult={(data) => setAudioResult(data)}
+            onVideoResult={(data) => setVideoResult(data)}
+            disabled={isEvaluating}
+          />
+
           {/* Answer section */}
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
@@ -530,21 +541,12 @@ export default function InterviewRoom() {
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   disabled={isEvaluating}
-                  placeholder="Type your answer here. Use the STAR method — be specific, give examples, discuss trade-offs."
+                  placeholder="Type your answer here, or use the Interview Monitor above to record your answer. STAR method — Situation, Task, Action, Result."
                   rows={7}
                   className="w-full text-sm text-gray-800 placeholder-gray-400 border border-gray-200 rounded-xl
                     px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-brand-400
                     focus:border-transparent leading-relaxed transition-shadow
                     disabled:bg-gray-50 disabled:text-gray-500"
-                />
-
-                {/* Audio recorder (optional) */}
-                <AudioRecorder
-                  sessionId={session?.session_id}
-                  questionNumber={questionNumber}
-                  onTranscript={(text) => setAnswer((prev) => prev || text)}
-                  onResult={(data) => setAudioResult(data)}
-                  disabled={isEvaluating}
                 />
 
                 {evalStatus === ES.error && (
@@ -599,6 +601,17 @@ export default function InterviewRoom() {
                     d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
                 </svg>
                 <span className="text-sm font-semibold text-indigo-700">Rubric Breakdown</span>
+                {evaluation.evaluation_source && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border
+                    ${evaluation.evaluation_source.startsWith("llm:")
+                      ? "bg-indigo-100 text-indigo-700 border-indigo-200"
+                      : "bg-white text-gray-500 border-gray-200"}`}
+                  >
+                    {evaluation.evaluation_source.startsWith("llm:")
+                      ? `AI: ${evaluation.evaluation_source.replace("llm:", "").toUpperCase()}`
+                      : "Rule-based"}
+                  </span>
+                )}
                 {evaluation.rubric_total != null && (
                   <span className="ml-auto text-xs font-bold text-indigo-600 tabular-nums">
                     {evaluation.rubric_total}/100
@@ -816,7 +829,6 @@ export default function InterviewRoom() {
         {/* ── Right column — sidebar ───────────────────────────────── */}
         <div className="space-y-4">
 
-          {/* Video monitor — hidden on mobile, shown on large screens */}
           {/* Phase 11: Candidate state panel (skill mastery + profile) */}
           {candidateState ? (
             <CandidateStatePanel candidateState={candidateState} />
@@ -878,76 +890,7 @@ export default function InterviewRoom() {
             </SidebarCard>
           )}
 
-          {/* Audio scores sidebar card */}
-          {audioResult && (
-            <SidebarCard title="Audio Scores">
-              <ScoreLine label="Confidence" score={audioResult.confidence_score} />
-              <ScoreLine label="Clarity"    score={audioResult.communication_clarity_score} />
-              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">Pace</span>
-                  <span className={`font-semibold capitalize
-                    ${audioResult.speaking_rate === "medium" ? "text-green-600"
-                      : audioResult.speaking_rate === "fast" ? "text-orange-500"
-                      : "text-blue-500"}`}>
-                    {audioResult.speaking_rate}
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-400">Pauses</span>
-                  <span className="font-semibold text-gray-700">{audioResult.pause_count}</span>
-                </div>
-                {audioResult.mode === "fallback" && (
-                  <p className="text-[10px] text-amber-600 pt-1">
-                    Heuristic mode — install faster-whisper for real transcription
-                  </p>
-                )}
-              </div>
-            </SidebarCard>
-          )}
-
-          {/* Video scores sidebar card */}
-          {videoResult && (
-            <SidebarCard title="Video Scores">
-              {videoResult.status === "invalid_analysis" ? (
-                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
-                  <p className="text-xs font-semibold text-red-700 mb-1">Analysis unsuccessful</p>
-                  <p className="text-[10px] text-red-600 leading-relaxed">
-                    {videoResult.reason ?? "Insufficient face visibility for reliable analysis."}
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {videoResult.engagement_score  != null && <ScoreLine label="Engagement" score={videoResult.engagement_score} />}
-                  {videoResult.framing_score     != null && <ScoreLine label="Framing"    score={videoResult.framing_score} />}
-                  {videoResult.stability_score   != null && <ScoreLine label="Stability"  score={videoResult.stability_score} />}
-                  <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-                    {videoResult.movement_activity && (
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">Motion</span>
-                        <span className={`font-semibold capitalize
-                          ${videoResult.movement_activity === "low"    ? "text-green-600"
-                            : videoResult.movement_activity === "medium" ? "text-yellow-500"
-                            : "text-red-500"}`}>
-                          {videoResult.movement_activity === "low" ? "Calm"
-                            : videoResult.movement_activity === "medium" ? "Moderate"
-                            : "Elevated"}
-                        </span>
-                      </div>
-                    )}
-                    {videoResult.warning && (
-                      <p className="text-[10px] text-amber-600">{videoResult.warning}</p>
-                    )}
-                    {videoResult.mode === "fallback" && (
-                      <p className="text-[10px] text-amber-600 pt-1">
-                        Heuristic mode — install opencv-python for real analysis
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-            </SidebarCard>
-          )}
+          {/* Media scores are shown inside InterviewMonitor above */}
 
           {/* Running session overview after first Q answered */}
           {history.length >= 1 && (

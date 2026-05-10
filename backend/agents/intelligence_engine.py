@@ -177,18 +177,30 @@ def build_interview_plan(resume_analysis, selected_role: str) -> list[InterviewP
     plan_topics: list[dict] = []  # {topic, difficulty, reason, evidence, target_skill}
 
     # Step 1 — Project Deep Dive (always first if projects exist)
+    # Select the project most relevant to the target role, not just projects[0]
     if projects and curriculum and curriculum[0] == "Project Deep Dive":
-        proj = projects[0]
+        proj = projects[0]  # safe default
+        domain_label = ""
+        try:
+            from services.project_classifier import select_best_project
+            best, relevance, _ = select_best_project(projects, selected_role)
+            if best is not None:
+                proj = best
+                if getattr(getattr(proj, "domain", None), "primary_domain", ""):
+                    domain_label = f" [{proj.domain.primary_domain}]"
+        except Exception:
+            pass
+
         techs = ", ".join(getattr(proj, "technologies", [])[:3]) or "your mentioned technologies"
         plan_topics.append({
             "topic": "Project Deep Dive",
             "difficulty": "easy",
             "reason": (
-                f"Opening with a deep dive into your '{proj.name}' project built with {techs}. "
+                f"Opening with a deep dive into your '{proj.name}'{domain_label} project built with {techs}. "
                 "This personalises the session and reveals how you think about architecture and trade-offs."
             ),
             "evidence": [
-                f"Project '{proj.name}' on resume",
+                f"Project '{proj.name}'{domain_label} on resume",
                 f"Technologies used: {techs}",
             ],
             "target_skill": "Technical Communication",

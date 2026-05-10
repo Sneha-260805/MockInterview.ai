@@ -249,7 +249,7 @@ async def _llm_why_fit(
 ) -> str | None:
     from config import get_settings
     settings = get_settings()
-    if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
+    if not settings.has_llm_configured:
         return None
     try:
         from services.llm_client import call_llm
@@ -316,10 +316,14 @@ async def recommend(
 
         # Generate why_fit
         why = None
+        why_source = "rule_based_fallback"
         if use_llm_blurb:
             why = await _llm_why_fit(
                 job, matched, missing, sc, candidate_name, candidate_skills
             )
+            if why:
+                from config import get_settings
+                why_source = f"llm:{get_settings().llm_provider.lower()}"
         if not why:
             why = _why_fit_rule(matched, missing, sc, job.title, job.company, candidate_name)
 
@@ -343,6 +347,7 @@ async def recommend(
                 is_live=job.is_live,
                 is_fallback_sample=job.is_fallback_sample,
                 remote=job.remote,
+                why_fit_source=why_source,
             ),
         ))
 

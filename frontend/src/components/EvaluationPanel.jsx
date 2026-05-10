@@ -72,6 +72,9 @@ export default function EvaluationPanel({ evaluation }) {
     (isAi
       ? `AI evaluation (${evaluation.evaluation_provider || "LLM"})`
       : "Rule-based evaluation");
+  const sourceClass = isAi
+    ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+    : "border-gray-200 bg-gray-50 text-gray-600";
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -89,11 +92,7 @@ export default function EvaluationPanel({ evaluation }) {
           <p className="text-xs text-gray-400">Overall rating: <span className="font-medium text-indigo-600">{overallLabel}</span></p>
         </div>
         </div>
-        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-          isAi
-            ? "border-indigo-200 bg-indigo-50 text-indigo-700"
-            : "border-gray-200 bg-gray-50 text-gray-600"
-        }`}>
+        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${sourceClass}`}>
           {sourceLabel}
         </span>
       </div>

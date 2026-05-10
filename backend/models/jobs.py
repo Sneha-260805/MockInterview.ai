@@ -35,6 +35,7 @@ class JobMatch(BaseModel):
     is_fallback_sample: bool = True
     remote: Optional[bool] = None
     explanation: Optional[str] = None
+    why_fit_source: str = "rule_based_fallback"
 
 
 class JobRecommendationResponse(BaseModel):
