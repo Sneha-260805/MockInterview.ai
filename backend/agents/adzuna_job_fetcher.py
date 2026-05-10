@@ -11,7 +11,7 @@ from config import get_settings
 
 logger = logging.getLogger(__name__)
 
-ADZUNA_BASE_URL = "https://api.adzuna.com/v1/api/jobs/in/search/1"
+ADZUNA_BASE_URL = "https://api.adzuna.com/v1/api/jobs/us/search/1"
 
 async def fetch_live_jobs(candidate_skills: list[str], candidate_level: str) -> list[JobListing]:
     """
@@ -59,6 +59,10 @@ async def fetch_live_jobs(candidate_skills: list[str], candidate_level: str) -> 
                 description=description[:300] + "..." if len(description) > 300 else description,
                 required_skills=required_skills,
                 apply_url=item.get("redirect_url", ""),
+                source="adzuna",
+                is_live=True,
+                is_fallback_sample=False,
+                remote=("remote" in (item.get("title", "") + " " + description).lower()),
             ))
 
         logger.info("Fetched %d live jobs from Adzuna.", len(jobs))

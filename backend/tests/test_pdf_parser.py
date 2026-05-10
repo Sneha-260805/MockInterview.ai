@@ -14,7 +14,7 @@ class TestExtractFromTxt:
         assert "Python" in result
 
     def test_latin1_encoding_fallback(self):
-        content = "Résumé — Software Ëngineer"
+        content = "Résumé - Software Ëngineer"
         result = extract_from_txt(content.encode("latin-1"))
         assert len(result) > 0
 

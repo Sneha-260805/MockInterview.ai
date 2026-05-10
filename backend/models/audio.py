@@ -36,3 +36,12 @@ class AudioAnalysisResponse(BaseModel):
     mode: str                                  # "faster_whisper" | "whisper" | "fallback"
     word_count: Optional[int] = None
     duration_seconds: Optional[float] = None
+    filler_word_count: int = 0
+    filler_words: list[str] = []
+    hesitation_count: int = 0
+    hesitation_rate: Optional[float] = None
+    pause_rate_per_minute: Optional[float] = None
+    pitch_variation_proxy: Optional[int] = None
+    volume_energy_proxy: Optional[int] = None
+    tone_proxy: str = "unknown"
+    metrics_source: str = "heuristic"

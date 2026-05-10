@@ -503,6 +503,9 @@ def make_next_question_decision(
     current_question: dict,
     interview_plan: list[InterviewPlanItem],
     session_history: list[dict],
+    audio_score: Optional[dict] = None,
+    video_score: Optional[dict] = None,
+    multimodal_score: Optional[dict] = None,
 ) -> AgentDecisionTrace:
     """
     Decide what to do next based on candidate state, not just the raw score.
@@ -519,9 +522,19 @@ def make_next_question_decision(
     topic_count = sum(1 for h in session_history if h.get("question", {}).get("topic") == current_topic)
 
     # ── Determine decision type ────────────────────────────────────────────────
-    audio_conf = 100  # default if no audio
+    audio_conf = int(audio_score.get("confidence_score", 100)) if audio_score else 100
+    audio_clarity = int(audio_score.get("communication_clarity_score", 100)) if audio_score else 100
+    video_engagement = int(video_score.get("engagement_score", 100)) if video_score else 100
+    visual_stress = (video_score or {}).get("stress_indicator") or (video_score or {}).get("stress_nervousness_indicator")
+    combined_score = int(multimodal_score.get("combined_score", tech_score)) if multimodal_score else tech_score
     risk_flags = candidate_state.risk_flags
-    has_confidence_flag = any("Low vocal confidence" in f for f in risk_flags)
+    has_confidence_flag = (
+        any("Low vocal confidence" in f for f in risk_flags)
+        or audio_conf < 50
+        or audio_clarity < 45
+        or video_engagement < 45
+        or visual_stress == "high"
+    )
     has_repeated_weakness = any("Repeated weakness" in f and current_topic in f for f in risk_flags)
 
     # Check for persistent domain weakness via domain_performance history
@@ -530,28 +543,16 @@ def make_next_question_decision(
     persistent_weak = len(topic_history) >= 2 and (sum(topic_history[-2:]) / 2) < 50
 
     if has_repeated_weakness or persistent_weak:
-        # If there's a totally different domain available, pivot instead of drilling
-        covered_set = {h.get("question", {}).get("topic", "") for h in session_history}
-        covered_set.add(current_topic)
-        plan_topics_in_order = [item.topic for item in interview_plan]
-        alternate = next(
-            (t for t in plan_topics_in_order
-             if t not in covered_set and t != current_topic),
-            None,
+        decision_type = "remediation"
+        detail = (
+            f"last two scores avg {round(sum(topic_history[-2:])/max(len(topic_history[-2:]),1))}/100"
+            if topic_history else
+            "repeated weakness flag present"
         )
-        if alternate and alternate != current_topic:
-            decision_type = "domain_pivot"
-            detected_issue = (
-                f"'{current_topic}' has shown consistent weakness "
-                f"(last two scores avg {round(sum(topic_history[-2:])/max(len(topic_history[-2:]),1))}/100). "
-                "Pivoting to a different domain to avoid stalling momentum."
-            )
-        else:
-            decision_type = "remediation"
-            detected_issue = (
-                f"'{current_topic}' has been flagged as weak twice. "
-                "The candidate needs reinforcement on fundamentals before advancing."
-            )
+        detected_issue = (
+            f"'{current_topic}' has been flagged as weak more than once ({detail}). "
+            "The candidate needs reinforcement on fundamentals before advancing."
+        )
     elif has_confidence_flag:
         decision_type = "confidence_recovery"
         detected_issue = (
@@ -559,10 +560,10 @@ def make_next_question_decision(
             "Easing to a more accessible question to rebuild momentum."
         )
     elif tech_score >= 85 and depth_score >= 65:
-        decision_type = "aggressive_escalation"
+        decision_type = "increase_difficulty"
         detected_issue = (
             f"Exceptional performance ({tech_score}/100, depth {depth_score}/100) on '{current_topic}'. "
-            "Jumping to the hardest available topic to fully test the ceiling."
+            "Increasing difficulty to test the ceiling."
         )
     elif tech_score >= 80:
         decision_type = "increase_difficulty"
@@ -597,26 +598,10 @@ def make_next_question_decision(
     # Use interview plan as the preferred order
     plan_topics_in_order = [item.topic for item in interview_plan]
 
-    # For aggressive_escalation: jump to hardest uncovered plan topic
-    if decision_type == "aggressive_escalation":
-        hard_topics = [
-            item.topic for item in interview_plan
-            if item.difficulty == "hard" and item.topic not in covered_topics
-        ]
-        next_planned = hard_topics[0] if hard_topics else next(
-            (t for t in plan_topics_in_order if t not in covered_topics), None
-        )
-    # For domain_pivot: already computed alternate above; reuse it
-    elif decision_type == "domain_pivot":
-        next_planned = next(
-            (t for t in plan_topics_in_order if t not in covered_topics and t != current_topic),
-            None,
-        )
-    else:
-        next_planned = next(
-            (t for t in plan_topics_in_order if t not in covered_topics),
-            None,
-        )
+    next_planned = next(
+        (t for t in plan_topics_in_order if t not in covered_topics),
+        None,
+    )
 
     # Fallback: use weakest untested topic from mastery map
     if not next_planned:
@@ -632,9 +617,7 @@ def make_next_question_decision(
         next_planned = current_topic
 
     # ── Determine next difficulty ──────────────────────────────────────────────
-    if decision_type == "aggressive_escalation":
-        next_diff = "hard"
-    elif decision_type == "increase_difficulty":
+    if decision_type == "increase_difficulty":
         diff_map = {"easy": "medium", "medium": "hard", "hard": "hard"}
         next_diff = diff_map.get(current_diff, "medium")
     elif decision_type in ("strengthen_fundamentals", "confidence_recovery", "remediation"):
@@ -686,6 +669,13 @@ def make_next_question_decision(
     evidence: list[str] = []
     evidence.append(f"Technical score on Q: {tech_score}/100")
     evidence.append(f"Depth score: {depth_score}/100")
+    if audio_score:
+        evidence.append(f"Audio confidence: {audio_conf}/100; clarity: {audio_clarity}/100")
+    if video_score:
+        stress_label = visual_stress or "not flagged"
+        evidence.append(f"Video engagement: {video_engagement}/100; stress proxy: {stress_label}")
+    if multimodal_score:
+        evidence.append(f"Combined multimodal score: {combined_score}/100")
     if covered:
         evidence.append(f"Covered: {', '.join(covered[:2])}")
     if missing:

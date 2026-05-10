@@ -40,6 +40,28 @@ class ResumeAnalysis(BaseModel):
     achievements: List[str] = Field(default_factory=list)
     work_experience: List[WorkExperience] = Field(default_factory=list)
 
+    @property
+    def experience(self) -> List[WorkExperience]:
+        return self.work_experience
+
+    @property
+    def seniority_signals(self) -> List[str]:
+        signals = [self.experience_level]
+        text = " ".join(
+            [exp.role for exp in self.work_experience]
+            + [exp.company for exp in self.work_experience]
+            + self.achievements
+        ).lower()
+        if any(term in text for term in ("lead", "led", "senior", "architect", "mentor", "managed")):
+            signals.append("leadership")
+        if self.work_experience:
+            signals.append("work experience")
+        return list(dict.fromkeys([s for s in signals if s]))
+
+    @property
+    def domain_exposure(self) -> List[str]:
+        return self.domains
+
 
 class AnalyzeRequest(BaseModel):
     candidate_id: str
@@ -52,6 +74,10 @@ class RoleMatch(BaseModel):
     reason: str
     focus_areas: List[str]
     weak_areas_to_probe: List[str]
+    evidence: List[str] = Field(default_factory=list)
+    confidence: Optional[int] = None
+    interview_focus_areas: List[str] = Field(default_factory=list)
+    project_deep_dive_areas: List[str] = Field(default_factory=list)
 
 
 class RoleRecommendationResponse(BaseModel):

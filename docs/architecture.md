@@ -297,7 +297,17 @@ The `behavioral_mode` field in FinalReport indicates data quality:
 
 ---
 
-## 10. Next Steps
+## 10. Hackathon Completion Update
+
+- `services/question_generator.py` owns resume-aware dynamic question generation. It prefers an LLM when configured, otherwise it uses deterministic templates grounded in role, resume projects, skills, weak areas, previous missing points, topic, and difficulty.
+- `agents/intelligence_engine.py` is the central decision-maker. `/api/interview/next-question` now uses its next topic and difficulty directly, then asks the question generator to create the next question.
+- `services/multimodal_aggregator.py` combines technical, communication, confidence, engagement, and role-fit scores with weights of 45/20/15/10/10. Audio hesitation and video stress proxies adjust confidence and are included as evidence.
+- Audio analysis returns transcript, pace, pauses, filler words, hesitation count/rate, clarity, confidence, pitch/energy proxies, tone proxy, and `metrics_source`.
+- Video analysis returns face presence, framing/eye-contact proxy, head stability/posture proxy, expression proxy, engagement, stress/nervousness proxy, and `metrics_source`.
+- Job recommendations include live/sample provenance, source, apply URL, matched/missing skills, match explanation, and fallback labels.
+- Known limitation: eye contact, posture, facial expression, stress, tone, pitch, and energy are practical proxies unless dedicated pretrained models are installed and validated.
+
+## 11. Next Steps
 
 - [ ] Real-time Web Speech API transcription during typing
 - [ ] Gaze-estimation model replacing face-centring proxy

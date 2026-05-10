@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 
 
@@ -17,13 +18,22 @@ class Settings(BaseSettings):
     llm_provider: str = "anthropic"   # "anthropic" | "gemini"
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
 
     # Adzuna live job API
     adzuna_app_id: str = ""
     adzuna_app_key: str = ""
 
+    @field_validator("debug", mode="before")
+    @classmethod
+    def _parse_debug(cls, value):
+        if isinstance(value, str) and value.lower() not in {"true", "false", "1", "0", "yes", "no", "on", "off"}:
+            return False
+        return value
+
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 @lru_cache

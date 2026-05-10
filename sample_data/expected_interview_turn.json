@@ -1,0 +1,22 @@
+{
+  "question": {
+    "difficulty": "medium",
+    "topic": "API Design",
+    "generation_mode": "deterministic_dynamic",
+    "expected_concepts": ["idempotency", "versioning", "validation", "error handling"]
+  },
+  "evaluation": {
+    "technical_score": 72,
+    "depth_score": 68,
+    "correctness_score": 68
+  },
+  "decision_trace": {
+    "decision_type": "deeper_follow_up",
+    "signal_scores": {
+      "technical": 72,
+      "communication_clarity": 75,
+      "confidence": 70,
+      "engagement": 65
+    }
+  }
+}

@@ -29,6 +29,23 @@ function deriveConfidence(evaluation, answerText) {
   return Math.min(100, Math.round(avg * 0.8 + lengthBonus));
 }
 
+function behavioralConfidence(audioResult, videoResult, evaluation, answerText) {
+  if (audioResult?.confidence_score != null && audioResult.status !== "invalid_audio") {
+    return audioResult.confidence_score;
+  }
+  if (videoResult?.status !== "invalid_analysis") {
+    const signals = [
+      videoResult?.engagement_score,
+      videoResult?.framing_score,
+      videoResult?.stability_score,
+    ].filter((v) => v != null);
+    if (signals.length) {
+      return Math.round(signals.reduce((sum, v) => sum + v, 0) / signals.length);
+    }
+  }
+  return deriveConfidence(evaluation, answerText);
+}
+
 // ── Difficulty colour helper ─────────────────────────────────────────────────
 function diffColor(diff) {
   return diff === "hard"
@@ -121,6 +138,7 @@ export default function InterviewRoom() {
 
   // Auto-scroll to evaluation after submit
   const evalRef = useRef(null);
+  const videoMonitorRef = useRef(null);
 
   // ── Load session if not passed via router state ───────────────────────────
   useEffect(() => {
@@ -171,6 +189,9 @@ export default function InterviewRoom() {
     setDecisionTrace(null); // clear trace when submitting new answer
 
     try {
+      const videoData = await videoMonitorRef.current?.finishTurn?.();
+      if (videoData) setVideoResult(videoData);
+
       const result = await evaluateAnswer({
         sessionId:      session.session_id,
         questionId:     activeQuestion.question_id,
@@ -255,7 +276,7 @@ export default function InterviewRoom() {
     setNextStatus(NS.fetching);
     setNextError("");
 
-    const confidence = deriveConfidence(evaluation, submittedAnswer);
+    const confidence = behavioralConfidence(audioResult, videoResult, evaluation, submittedAnswer);
 
     try {
       const data = await nextQuestion({
@@ -494,6 +515,17 @@ export default function InterviewRoom() {
               </div>
             ) : (
               <div className="p-6 space-y-4">
+                <div>
+                  <VideoRecorder
+                    ref={videoMonitorRef}
+                    sessionId={session?.session_id}
+                    questionNumber={questionNumber}
+                    onResult={(data) => setVideoResult(data)}
+                    disabled={isEvaluating}
+                    autoStart
+                  />
+                </div>
+
                 <textarea
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
@@ -535,7 +567,7 @@ export default function InterviewRoom() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                       </svg>
-                      Evaluating your answer…
+                      Analysing answer and interview signals…
                     </>
                   ) : (
                     <>
@@ -785,15 +817,6 @@ export default function InterviewRoom() {
         <div className="space-y-4">
 
           {/* Video monitor — hidden on mobile, shown on large screens */}
-          <div className="hidden lg:block">
-            <VideoRecorder
-              sessionId={session?.session_id}
-              questionNumber={questionNumber}
-              onResult={(data) => setVideoResult(data)}
-              disabled={isEvaluating}
-            />
-          </div>
-
           {/* Phase 11: Candidate state panel (skill mastery + profile) */}
           {candidateState ? (
             <CandidateStatePanel candidateState={candidateState} />

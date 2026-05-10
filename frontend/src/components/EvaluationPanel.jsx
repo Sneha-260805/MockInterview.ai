@@ -66,11 +66,18 @@ export default function EvaluationPanel({ evaluation }) {
 
   const { technical_score, depth_score, correctness_score, covered_points, missing_points, feedback } = evaluation;
   const overallLabel = technical_score >= 70 ? "Strong" : technical_score >= 50 ? "Moderate" : "Needs Work";
+  const isAi = evaluation.evaluation_mode === "ai";
+  const sourceLabel =
+    evaluation.evaluation_source_label ||
+    (isAi
+      ? `AI evaluation (${evaluation.evaluation_provider || "LLM"})`
+      : "Rule-based evaluation");
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white">
+      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white">
+        <div className="flex items-center gap-3 min-w-0">
         <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
           <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round"
@@ -78,9 +85,17 @@ export default function EvaluationPanel({ evaluation }) {
           </svg>
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-800">AI Evaluation Complete</p>
+          <p className="text-sm font-semibold text-gray-800">Evaluation Complete</p>
           <p className="text-xs text-gray-400">Overall rating: <span className="font-medium text-indigo-600">{overallLabel}</span></p>
         </div>
+        </div>
+        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+          isAi
+            ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+            : "border-gray-200 bg-gray-50 text-gray-600"
+        }`}>
+          {sourceLabel}
+        </span>
       </div>
 
       <div className="p-6 space-y-6">

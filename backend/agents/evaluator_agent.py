@@ -30,6 +30,13 @@ async def _llm_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult | None:
     settings = get_settings()
     if not settings.use_llm or (not settings.anthropic_api_key and not settings.gemini_api_key):
         return None
+    provider = (
+        "gemini"
+        if settings.llm_provider.lower() == "gemini" and settings.gemini_api_key
+        else "anthropic"
+        if settings.anthropic_api_key
+        else settings.llm_provider.lower()
+    )
 
     try:
         from services.llm_client import call_llm
@@ -84,6 +91,9 @@ async def _llm_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult | None:
             covered_points=llm_covered,
             missing_points=llm_missing,
             feedback=data.get("feedback", ""),
+            evaluation_mode="ai",
+            evaluation_provider=provider,
+            evaluation_source_label=f"AI evaluation ({provider})",
         )
 
     except Exception as exc:
@@ -113,6 +123,20 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
       4. Semantic modifier  = doc_sim × 15   (max +15 bonus, never a penalty)
       5. Competence floors  keyed on (signal count × coverage ratio)
     """
+    answer_words = req.answer.split()
+    if not req.answer.strip():
+        return EvaluationResult(
+            technical_score=0,
+            depth_score=0,
+            correctness_score=0,
+            covered_points=[],
+            missing_points=req.expected_points,
+            feedback="No answer was provided, so there is not enough evidence to assess technical understanding.",
+            evaluation_mode="rule_based",
+            evaluation_provider="rule_based",
+            evaluation_source_label="Rule-based evaluation",
+        )
+
     try:
         from services import semantic_scorer as sem
 
@@ -168,6 +192,10 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
 
         correctness = sc.correctness_score(ratio)
         technical = max(5, min(100, technical))
+        if not covered and len(answer_words) <= 6:
+            technical = min(technical, 7)
+            correctness = min(correctness, 5)
+            depth = min(depth, 5)
 
     except Exception as exc:
         logger.warning("Semantic scoring failed, falling back to keyword: %s", exc)
@@ -176,6 +204,10 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
         signals = []
         correctness = sc.correctness_score(ratio)
         technical = sc.technical_score_rule_based(ratio, depth)
+        if not covered and len(answer_words) <= 6:
+            technical = min(technical, 7)
+            correctness = min(correctness, 5)
+            depth = min(depth, 5)
 
     feedback = sc.generate_feedback(covered, missing, technical, depth)
 
@@ -186,6 +218,9 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
         covered_points=covered,
         missing_points=missing,
         feedback=feedback,
+        evaluation_mode="rule_based",
+        evaluation_provider="rule_based",
+        evaluation_source_label="Rule-based evaluation",
     )
 
 
@@ -204,6 +239,8 @@ def _add_rubric_scores(result: EvaluationResult, req: EvaluateAnswerRequest) -> 
     but didn't surface specific rubric keywords should NOT be penalised for that mismatch.
     Conversely, a keyword-heavy answer with weak depth SHOULD see its score improved by rubric.
     """
+    if not req.answer.strip():
+        return result
     try:
         topic = getattr(req, "topic", None) or ""
         rubric_data = rubric.score_with_rubric(req.answer, topic, req.expected_points)

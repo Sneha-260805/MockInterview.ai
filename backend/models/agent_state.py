@@ -58,6 +58,9 @@ class AgentDecisionTrace(BaseModel):
     next_difficulty: str
     reason_for_adaptation: str          # human-readable explanation shown in UI
     evidence: List[str]                 # bullet-point evidence for the decision
+    signal_scores: Dict[str, int] = {}
+    difficulty_rationale: str = ""
+    topic_rationale: str = ""
 
 
 class InterviewPlanResponse(BaseModel):

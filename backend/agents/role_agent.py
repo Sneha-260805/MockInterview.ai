@@ -99,6 +99,13 @@ def recommend(analysis: ResumeAnalysis) -> RoleRecommendationResponse:
         reason = rd["tpl"].format(
             matched=", ".join(disp[:4]) if disp else "relevant technical skills"
         )
+        project_areas = []
+        for p in analysis.projects[:2]:
+            techs = ", ".join(p.technologies[:4]) if p.technologies else "architecture and trade-offs"
+            project_areas.append(f"{p.name}: probe {techs}")
+        evidence = [f"Matched skill: {s}" for s in disp[:5]]
+        for d in analysis.domains[:2]:
+            evidence.append(f"Domain exposure: {d}")
         scored.append(
             RoleMatch(
                 role=rd["role"],
@@ -106,6 +113,10 @@ def recommend(analysis: ResumeAnalysis) -> RoleRecommendationResponse:
                 reason=reason,
                 focus_areas=rd["focus_areas"],
                 weak_areas_to_probe=rd["probing"],
+                evidence=evidence or [reason],
+                confidence=score,
+                interview_focus_areas=rd["focus_areas"],
+                project_deep_dive_areas=project_areas,
             )
         )
 
@@ -120,6 +131,10 @@ def recommend(analysis: ResumeAnalysis) -> RoleRecommendationResponse:
                 reason="General software development skills detected across the resume.",
                 focus_areas=["Problem solving", "Clean code practices", "Algorithm fundamentals"],
                 weak_areas_to_probe=["System design", "Testing strategy", "Cloud platform basics"],
+                evidence=["Fallback role generated because no specific role reached the skill threshold."],
+                confidence=50,
+                interview_focus_areas=["Problem solving", "Clean code practices", "Algorithm fundamentals"],
+                project_deep_dive_areas=[],
             )
         )
     if len(scored) == 1:
@@ -130,6 +145,10 @@ def recommend(analysis: ResumeAnalysis) -> RoleRecommendationResponse:
                 reason="Technical background is well-suited for support, debugging, and documentation roles.",
                 focus_areas=["Debugging & root-cause analysis", "Technical documentation", "Customer empathy"],
                 weak_areas_to_probe=["Automation scripting", "Network fundamentals", "Cloud service basics"],
+                evidence=["Secondary fallback role based on broad technical background."],
+                confidence=40,
+                interview_focus_areas=["Debugging & root-cause analysis", "Technical documentation", "Customer empathy"],
+                project_deep_dive_areas=[],
             )
         )
 

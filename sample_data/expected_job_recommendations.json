@@ -1,0 +1,18 @@
+{
+  "candidate_id": "sample-candidate",
+  "source": "sample",
+  "is_live": false,
+  "fallback_reason": "Live job API credentials are missing or the provider returned no usable postings.",
+  "recommended_jobs": [
+    {
+      "title": "Backend Developer",
+      "company": "SampleCo",
+      "source": "sample",
+      "is_fallback_sample": true,
+      "match_score": 82,
+      "matched_skills": ["Python", "FastAPI"],
+      "missing_skills": ["Kubernetes"],
+      "why_fit": "Candidate skills align with the backend role."
+    }
+  ]
+}

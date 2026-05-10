@@ -15,7 +15,7 @@
  *   disabled       {boolean}  — locks controls while answer is being evaluated
  */
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { analyzeVideo } from "../services/interviewService";
 
 // ── State machine ─────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ const VS = {
   error:      "error",
 };
 
-const MAX_RECORD_SECONDS = 15;
+const MAX_RECORD_SECONDS = 120;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function scoreColor(s) {
@@ -57,12 +57,13 @@ function MiniScore({ label, value, colorFn, isText = false }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function VideoRecorder({
+const VideoRecorder = forwardRef(function VideoRecorder({
   sessionId,
   questionNumber,
   onResult,
   disabled = false,
-}) {
+  autoStart = false,
+}, ref) {
   const [vs,       setVs]       = useState(VS.idle);
   const [elapsed,  setElapsed]  = useState(0);
   const [error,    setError]    = useState("");
@@ -74,6 +75,9 @@ export default function VideoRecorder({
   const chunksRef   = useRef([]);
   const timerRef    = useRef(null);
   const autoStopRef = useRef(null);
+  const uploadPromiseRef = useRef(null);
+  const pendingStopResolveRef = useRef(null);
+  const enabledOnceRef = useRef(false);
 
   // ── Wire stream to <video> element when stream changes ────────────────────
   useEffect(() => {
@@ -102,11 +106,30 @@ export default function VideoRecorder({
       });
       streamRef.current = stream;
       setVs(VS.preview);
+      return stream;
     } catch {
       setError("Camera access denied. Please allow camera access and try again.");
       setVs(VS.error);
+      return null;
     }
   }
+
+  useEffect(() => {
+    if (!autoStart || disabled || enabledOnceRef.current) return;
+    enabledOnceRef.current = true;
+    enableCamera().then((stream) => {
+      if (stream) startRecording(stream);
+    });
+  }, [autoStart, disabled]);
+
+  useEffect(() => {
+    setResult(null);
+    setElapsed(0);
+    setError("");
+    if (autoStart && streamRef.current && !disabled) {
+      startRecording(streamRef.current);
+    }
+  }, [questionNumber]);
 
   // ── Capture single frame ──────────────────────────────────────────────────
   async function captureFrame() {
@@ -126,8 +149,14 @@ export default function VideoRecorder({
   }
 
   // ── Start video recording ─────────────────────────────────────────────────
-  function startRecording() {
+  function startRecording(streamOverride = null) {
     chunksRef.current = [];
+    const stream = streamOverride || streamRef.current;
+    if (!stream) {
+      setError("Camera is not active. Enable camera first.");
+      setVs(VS.error);
+      return;
+    }
     const mimeType = [
       "video/webm;codecs=vp9,opus",
       "video/webm;codecs=vp8,opus",
@@ -135,7 +164,7 @@ export default function VideoRecorder({
     ].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
 
     const rec = new MediaRecorder(
-      streamRef.current,
+      stream,
       mimeType ? { mimeType } : undefined,
     );
     recRef.current = rec;
@@ -143,7 +172,10 @@ export default function VideoRecorder({
     rec.ondataavailable = (e) => { if (e.data?.size > 0) chunksRef.current.push(e.data); };
     rec.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
-      await upload(blob, "recording.webm");
+      uploadPromiseRef.current = upload(blob, "recording.webm");
+      const data = await uploadPromiseRef.current;
+      pendingStopResolveRef.current?.(data);
+      pendingStopResolveRef.current = null;
     };
 
     rec.start(500);
@@ -156,7 +188,9 @@ export default function VideoRecorder({
   function stopRecording() {
     clearInterval(timerRef.current);
     clearTimeout(autoStopRef.current);
-    recRef.current?.stop();
+    if (recRef.current?.state === "recording") {
+      recRef.current.stop();
+    }
     setVs(VS.uploading);
   }
 
@@ -168,11 +202,49 @@ export default function VideoRecorder({
       setResult(data);
       setVs(VS.done);
       onResult?.(data);
+      return data;
     } catch (err) {
       setError(err.message || "Video analysis failed.");
       setVs(VS.preview);   // stay in preview so user can retry
+      return null;
     }
   }
+
+  async function finishTurn() {
+    if (vs === VS.recording && recRef.current?.state === "recording") {
+      return new Promise((resolve) => {
+        pendingStopResolveRef.current = resolve;
+        stopRecording();
+      });
+    }
+    if (vs === VS.uploading && uploadPromiseRef.current) {
+      return uploadPromiseRef.current;
+    }
+    if ((vs === VS.preview || vs === VS.done) && !result && previewRef.current) {
+      return new Promise((resolve) => {
+        const video = previewRef.current;
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+        canvas.toBlob(async (blob) => {
+          if (!blob) return resolve(null);
+          resolve(await upload(blob, "frame.jpg"));
+        }, "image/jpeg", 0.85);
+      });
+    }
+    return result;
+  }
+
+  useImperativeHandle(ref, () => ({
+    finishTurn,
+    startMonitoring: async () => {
+      const stream = streamRef.current || await enableCamera();
+      if (stream && recRef.current?.state !== "recording") {
+        startRecording(stream);
+      }
+    },
+  }));
 
   // ── Disable camera ────────────────────────────────────────────────────────
   function disableCamera() {
@@ -233,7 +305,8 @@ export default function VideoRecorder({
         {vs === VS.idle && (
           <div className="space-y-2">
             <p className="text-[11px] text-gray-500 leading-relaxed">
-              Enable your webcam to get engagement, framing, and stability scores.
+              Keep your camera on while answering. Engagement, framing, and
+              stability help adapt the next question.
             </p>
             <button
               type="button"
@@ -247,7 +320,7 @@ export default function VideoRecorder({
                 <path strokeLinecap="round" strokeLinejoin="round"
                   d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
               </svg>
-              Enable Camera
+              Start Camera Monitor
             </button>
           </div>
         )}
@@ -317,7 +390,7 @@ export default function VideoRecorder({
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="8" />
               </svg>
-              Record {MAX_RECORD_SECONDS}s
+              Record Turn
             </button>
           </div>
         )}
@@ -435,4 +508,6 @@ export default function VideoRecorder({
       </div>
     </div>
   );
-}
+});
+
+export default VideoRecorder;

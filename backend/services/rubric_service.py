@@ -548,6 +548,21 @@ def score_with_rubric(
       improvement_hint: targeted coaching based on lowest-scoring dimensions
       interviewer_diagnosis: 1-sentence diagnostic
     """
+    if not answer.strip():
+        return {
+            "rubric_scores": {
+                "conceptual_correctness": 0,
+                "practical_application": 0,
+                "depth_and_tradeoffs": 0,
+                "communication_structure": 0,
+                "resume_project_connection": 0,
+            },
+            "rubric_total": 0,
+            "evidence": [],
+            "improvement_hint": "Provide a substantive answer with at least one concrete concept, example, and trade-off.",
+            "interviewer_diagnosis": f"No answer was provided for '{topic}', so the rubric has no evidence to score.",
+        }
+
     al = _normalise(answer)
     rubric = _get_rubric(topic)
 

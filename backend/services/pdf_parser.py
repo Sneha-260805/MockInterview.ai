@@ -4,16 +4,49 @@ import fitz  # PyMuPDF
 
 
 def _clean(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"[ \t]+", " ", text)
     return text.strip()
+
+
+def _extract_page_lines(page) -> list[str]:
+    """
+    Extract PDF text by visual line order instead of relying only on PyMuPDF's
+    plain-text mode. Resume PDFs often use columns or positioned text boxes;
+    grouping spans by y/x coordinates preserves project titles and bullets more
+    reliably for the downstream resume parser.
+    """
+    page_dict = page.get_text("dict", sort=True)
+    rows: list[tuple[float, float, str]] = []
+
+    for block in page_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            spans = [
+                span.get("text", "").strip()
+                for span in sorted(line.get("spans", []), key=lambda s: s.get("bbox", [0])[0])
+                if span.get("text", "").strip()
+            ]
+            if not spans:
+                continue
+            bbox = line.get("bbox", [0, 0, 0, 0])
+            rows.append((round(float(bbox[1]), 1), round(float(bbox[0]), 1), " ".join(spans)))
+
+    rows.sort(key=lambda item: (item[0], item[1]))
+    return [text for _, _, text in rows]
 
 
 def extract_from_pdf(file_bytes: bytes) -> str:
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     pages = []
     for page in doc:
-        pages.append(page.get_text("text"))
+        lines = _extract_page_lines(page)
+        page_text = "\n".join(lines).strip()
+        if not page_text:
+            page_text = page.get_text("text")
+        pages.append(page_text)
     doc.close()
     return _clean("\n".join(pages))
 

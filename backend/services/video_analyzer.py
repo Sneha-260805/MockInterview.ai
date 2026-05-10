@@ -510,6 +510,14 @@ def _analyze_fallback(file_bytes: bytes, is_image: bool) -> dict:
             "Scores are estimated — install opencv-python for real face-detection analysis.",
         ],
         "warning": "Stability analysis requires opencv-python.",
+        "face_presence": True,
+        "face_presence_score": engagement,
+        "eye_contact_proxy": framing,
+        "facial_expression_proxy": "unavailable",
+        "posture_proxy": None,
+        "stress_nervousness_indicator": movement,
+        "nervousness_score": 35 if movement == "low" else 60 if movement == "medium" else 82,
+        "metrics_source": "heuristic",
     }
 
 

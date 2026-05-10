@@ -7,9 +7,9 @@ Usage in agents:
     if raw is None:
         return None   # fall back to rule-based path
 
-Provider selection (backend/.env):
+Provider selection (.env):
     LLM_PROVIDER=anthropic   ANTHROPIC_API_KEY=sk-ant-...
-    LLM_PROVIDER=gemini      GEMINI_API_KEY=AIza...
+    LLM_PROVIDER=gemini      GEMINI_API_KEY=AIza... GEMINI_MODEL=gemini-2.0-flash
 """
 
 import logging
@@ -31,7 +31,12 @@ async def call_llm(prompt: str, max_tokens: int = 600) -> str | None:
     provider = settings.llm_provider.lower()
 
     if provider == "gemini" and settings.gemini_api_key:
-        return await _call_gemini(settings.gemini_api_key, prompt, max_tokens)
+        return await _call_gemini(
+            settings.gemini_api_key,
+            getattr(settings, "gemini_model", "gemini-2.0-flash"),
+            prompt,
+            max_tokens,
+        )
 
     if settings.anthropic_api_key:
         return await _call_anthropic(settings.anthropic_api_key, prompt, max_tokens)
@@ -62,16 +67,35 @@ async def _call_anthropic(api_key: str, prompt: str, max_tokens: int) -> str | N
 
 # ── Google Gemini ─────────────────────────────────────────────────────────────
 
-async def _call_gemini(api_key: str, prompt: str, max_tokens: int) -> str | None:
+async def _call_gemini(api_key: str, model_name: str, prompt: str, max_tokens: int) -> str | None:
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            generation_config={"max_output_tokens": max_tokens, "temperature": 0.4},
+        import asyncio
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=api_key)
+
+        def _generate():
+            return client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=max_tokens,
+                    temperature=0.4,
+                ),
+            )
+
+        response = await asyncio.to_thread(_generate)
+        text = getattr(response, "text", None)
+        if text:
+            return text
+
+        logger.warning(
+            "Gemini LLM call returned no text. Model=%s Response=%r",
+            model_name,
+            response,
         )
-        response = await model.generate_content_async(prompt)
-        return response.text
+        return None
     except Exception as exc:
-        logger.warning("Gemini LLM call failed: %s", exc)
+        logger.warning("Gemini LLM call failed for model %s: %s", model_name, exc)
         return None

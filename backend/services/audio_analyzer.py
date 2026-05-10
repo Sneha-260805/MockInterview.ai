@@ -30,6 +30,7 @@ import logging
 import os
 import random
 import re
+import asyncio
 import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -41,20 +42,33 @@ logger = logging.getLogger(__name__)
 _ENGINE: str = "fallback"
 _model_instance = None
 
-try:
-    from faster_whisper import WhisperModel as _FasterWhisperModel  # type: ignore
-    _ENGINE = "faster_whisper"
-    logger.info("Audio analyser: faster-whisper detected.")
-except ImportError:
+_REAL_TRANSCRIPTION_ENABLED = os.getenv("ENABLE_REAL_AUDIO_TRANSCRIPTION", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+if _REAL_TRANSCRIPTION_ENABLED:
     try:
-        import whisper as _openai_whisper  # type: ignore
-        _ENGINE = "whisper"
-        logger.info("Audio analyser: openai-whisper detected.")
+        from faster_whisper import WhisperModel as _FasterWhisperModel  # type: ignore
+        _ENGINE = "faster_whisper"
+        logger.info("Audio analyser: faster-whisper detected.")
     except ImportError:
-        logger.info(
-            "Audio analyser: no Whisper library found — using fallback scoring. "
-            "Install faster-whisper for real transcription: pip install faster-whisper"
-        )
+        try:
+            import whisper as _openai_whisper  # type: ignore
+            _ENGINE = "whisper"
+            logger.info("Audio analyser: openai-whisper detected.")
+        except ImportError:
+            logger.info(
+                "Audio analyser: no Whisper library found - using fallback scoring. "
+                "Install faster-whisper for real transcription: pip install faster-whisper"
+            )
+else:
+    logger.info(
+        "Audio analyser: real transcription disabled; using fast heuristic scoring. "
+        "Set ENABLE_REAL_AUDIO_TRANSCRIPTION=true to enable Whisper transcription."
+    )
 
 # ── Optional: librosa for pitch analysis ──────────────────────────────────────
 
@@ -104,6 +118,9 @@ FILLER_RATIO_MOD   = 0.05        # ≥ 5 %                       → moderate
 PITCH_CV_VARIABLE  = 0.45        # CV > 0.45 → variable (high)
 PITCH_CV_MONOTONE  = 0.12        # CV < 0.12 → monotone (flat)
 
+WHISPER_MODEL_NAME = os.getenv("AUDIO_TRANSCRIPTION_MODEL", "tiny")
+WHISPER_TIMEOUT_SECONDS = float(os.getenv("AUDIO_ANALYSIS_TIMEOUT_SECONDS", "75"))
+
 
 # ── Model loader ───────────────────────────────────────────────────────────────
 
@@ -112,12 +129,12 @@ def _get_model():
     if _model_instance is None:
         if _ENGINE == "faster_whisper":
             from faster_whisper import WhisperModel
-            logger.info("Loading faster-whisper 'base' model (CPU, int8)…")
-            _model_instance = WhisperModel("base", device="cpu", compute_type="int8")
+            logger.info("Loading faster-whisper '%s' model (CPU, int8)...", WHISPER_MODEL_NAME)
+            _model_instance = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type="int8")
         elif _ENGINE == "whisper":
             import whisper as _w
-            logger.info("Loading openai-whisper 'base' model…")
-            _model_instance = _w.load_model("base")
+            logger.info("Loading openai-whisper '%s' model...", WHISPER_MODEL_NAME)
+            _model_instance = _w.load_model(WHISPER_MODEL_NAME)
     return _model_instance
 
 
@@ -401,6 +418,13 @@ def _invalid_audio_result(transcript: str, duration_s: float, word_count: int, w
         "mode":                          mode,
         "word_count":                    word_count,
         "duration_seconds":              round(duration_s, 1),
+        "hesitation_count":              0,
+        "hesitation_rate":               0.0,
+        "pause_rate_per_minute":         0.0,
+        "pitch_variation_proxy":         None,
+        "volume_energy_proxy":           None,
+        "tone_proxy":                    "insufficient_audio",
+        "metrics_source":                mode if mode in ("faster_whisper", "whisper") else "heuristic",
     }
 
 
@@ -450,6 +474,13 @@ def _analyze_faster_whisper(audio_path: str) -> dict:
         "mode":                          "faster_whisper",
         "word_count":                    word_count,
         "duration_seconds":              round(duration_s, 1),
+        "hesitation_count":              pause_count,
+        "hesitation_rate":               round(pause_rate, 2),
+        "pause_rate_per_minute":         round(pause_rate, 2),
+        "pitch_variation_proxy":         None,
+        "volume_energy_proxy":           None,
+        "tone_proxy":                    "measured_speech_proxy",
+        "metrics_source":                "whisper",
         "reason":                        None,
     }
 
@@ -497,6 +528,13 @@ def _analyze_openai_whisper(audio_path: str) -> dict:
         "mode":                          "whisper",
         "word_count":                    word_count,
         "duration_seconds":              round(duration_s, 1),
+        "hesitation_count":              pause_count,
+        "hesitation_rate":               round(pause_rate, 2),
+        "pause_rate_per_minute":         round(pause_rate, 2),
+        "pitch_variation_proxy":         None,
+        "volume_energy_proxy":           None,
+        "tone_proxy":                    "measured_speech_proxy",
+        "metrics_source":                "whisper",
         "reason":                        None,
     }
 
@@ -559,6 +597,13 @@ def _analyze_fallback(file_bytes: bytes) -> dict:
         "mode":                          "fallback",
         "word_count":                    word_count_est,
         "duration_seconds":              round(duration_s, 1),
+        "hesitation_count":              pause_count,
+        "hesitation_rate":               round(pause_rate, 2),
+        "pause_rate_per_minute":         round(pause_rate, 2),
+        "pitch_variation_proxy":         None,
+        "volume_energy_proxy":           None,
+        "tone_proxy":                    "heuristic_unknown",
+        "metrics_source":                "heuristic",
         "reason":                        None,
     }
 
@@ -582,10 +627,27 @@ async def analyze(file_bytes: bytes, filename: str = "audio.webm") -> dict:
         tmp.close()
 
         if _ENGINE == "faster_whisper":
-            return _analyze_faster_whisper(tmp.name)
-        else:
-            return _analyze_openai_whisper(tmp.name)
+            return await asyncio.wait_for(
+                asyncio.to_thread(_analyze_faster_whisper, tmp.name),
+                timeout=WHISPER_TIMEOUT_SECONDS,
+            )
+        return await asyncio.wait_for(
+            asyncio.to_thread(_analyze_openai_whisper, tmp.name),
+            timeout=WHISPER_TIMEOUT_SECONDS,
+        )
 
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Whisper analysis timed out after %.0fs - falling back to heuristics.",
+            WHISPER_TIMEOUT_SECONDS,
+        )
+        result = _analyze_fallback(file_bytes)
+        result["analysis_notes"].insert(
+            0,
+            f"Whisper transcription timed out after {int(WHISPER_TIMEOUT_SECONDS)}s; heuristic scoring used for this turn.",
+        )
+        result["reason"] = "Whisper transcription timed out."
+        return result
     except Exception as exc:
         logger.warning(
             "Whisper analysis failed (%s) — falling back to heuristics: %s", _ENGINE, exc

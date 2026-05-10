@@ -153,7 +153,7 @@ _DATE_PAT = re.compile(
 
 _DESC_STARTERS = frozenset({
     # Technical action verbs
-    "developed", "built", "created", "designed", "implemented", "worked",
+    "developed", "built", "created", "designed", "implemented", "worked", "added",
     "responsible", "managed", "led", "collaborated", "participated",
     "contributed", "used", "utilized", "helped", "assisted", "performed",
     "conducted", "analyzed", "analysed", "maintained", "improved", "enhanced",
@@ -346,7 +346,42 @@ def _parse_sections(text: str) -> dict[str, str]:
     return {k: "\n".join(v) for k, v in buf.items()}
 
 
+def _split_inline_section_header(text: str) -> str:
+    """
+    PDF extraction sometimes returns a section title and the first item on the
+    same visual line, e.g. "PROJECTS Interview Agent". Split those lines so the
+    normal section parser can still find the Projects block.
+    """
+    out: list[str] = []
+    header_words = sorted(_HEADER_LOOKUP.keys(), key=len, reverse=True)
+
+    for raw in text.split("\n"):
+        line = raw.strip()
+        lowered = line.lower()
+        matched = False
+        for header in header_words:
+            if not lowered.startswith(header + " "):
+                continue
+            prefix = line[:len(header)]
+            rest = line[len(header):].strip(" :-|")
+            if rest and prefix.isupper():
+                out.append(prefix)
+                out.append(rest)
+                matched = True
+                break
+        if not matched:
+            out.append(raw)
+
+    return "\n".join(out)
+
+
 # ── Entry heading detection ────────────────────────────────────────────────────
+
+_URL_RE = re.compile(r"(?i)\b(?:https?://|www\.|github\.com/|gitlab\.com/|bitbucket\.org/)\S+")
+_LINK_LABEL_RE = re.compile(
+    r"(?i)^\s*(?:github|gitlab|bitbucket|repo(?:sitory)?|source\s*code|code|demo|live\s*demo|link|url)\s*[:\-|]"
+)
+
 
 def _is_entry_heading(line: str) -> bool:
     """
@@ -360,6 +395,8 @@ def _is_entry_heading(line: str) -> bool:
     """
     line = line.strip()
     if not line or len(line) < 3:
+        return False
+    if _URL_RE.search(line) or _LINK_LABEL_RE.match(line):
         return False
     # Bullet characters → content line
     if line[0] in "•-*◦▪▸→–—":
@@ -427,6 +464,24 @@ def _group_into_entries(section_text: str) -> list[list[str]]:
     # No headings found → each line is its own entry (bullet lists, etc.)
     if not heading_found and lines:
         entries = [[l.strip()] for l in lines if l.strip()]
+
+    return entries
+
+
+def _group_project_entries(section_text: str) -> list[list[str]]:
+    """
+    Project sections need a softer fallback than certification sections. If a
+    PDF strips title styling and leaves only bullets, grouping every bullet as a
+    separate project is worse than keeping the block together as one project.
+    """
+    entries = _group_into_entries(section_text)
+    lines = [l.strip() for l in section_text.split("\n") if l.strip()]
+    if not lines:
+        return []
+
+    heading_count = sum(1 for line in lines if _is_entry_heading(line))
+    if heading_count == 0:
+        return [lines]
 
     return entries
 
@@ -544,7 +599,7 @@ def _extract_projects(text: str, sections: dict) -> list[Project]:
     if not section_text:
         return []
 
-    entries = _group_into_entries(section_text)
+    entries = _group_project_entries(section_text)
     projects: list[Project] = []
 
     for entry_lines in entries[:8]:
@@ -552,6 +607,13 @@ def _extract_projects(text: str, sections: dict) -> list[Project]:
             continue
 
         title_line = entry_lines[0]
+        if _URL_RE.search(title_line) or _LINK_LABEL_RE.match(title_line):
+            if projects:
+                link_line = re.sub(r"^[â€¢\-*â—¦â–ªâ–¸â†’â€“â€”]\s*", "", title_line).strip()
+                if link_line and link_line not in projects[-1].description:
+                    projects[-1].description.append(link_line)
+                    projects[-1].summary = " ".join(projects[-1].description[:3])[:300]
+            continue
 
         # Extract date from title line
         duration = _pull_date(title_line)
@@ -1044,6 +1106,7 @@ def _infer_weak_areas(skills: list[str], domains: list[str]) -> list[str]:
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def analyze(raw_text: str, candidate_id: str) -> ResumeAnalysis:
+    raw_text = _split_inline_section_header(raw_text)
     lines          = [l.strip() for l in raw_text.split("\n") if l.strip()]
 
     # Parse sections first — all extractors use this dict

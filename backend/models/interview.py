@@ -9,6 +9,11 @@ class Question(BaseModel):
     difficulty: str        # easy | medium | hard
     topic: str
     expected_points: List[str]
+    target_skill: Optional[str] = None
+    evaluation_rubric: Optional[Dict[str, Any]] = None
+    expected_concepts: Optional[List[str]] = None
+    follow_up_intent: Optional[str] = None
+    generation_mode: Optional[str] = None
 
 
 class EvaluationResult(BaseModel):
@@ -19,6 +24,9 @@ class EvaluationResult(BaseModel):
     covered_points: List[str]
     missing_points: List[str]
     feedback: str
+    evaluation_mode: str = "rule_based"          # "ai" | "rule_based"
+    evaluation_provider: str = "rule_based"      # "gemini" | "anthropic" | "rule_based"
+    evaluation_source_label: str = "Rule-based evaluation"
     # ── Phase 11: Rubric-based additions (optional — backward compatible) ──────
     rubric_scores: Optional[Dict[str, int]] = None   # dimension -> 0-30/25/20/15/10
     rubric_total: Optional[int] = None               # 0-100

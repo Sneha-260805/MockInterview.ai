@@ -79,6 +79,11 @@ async def analyze_audio(
             "analysis_notes":              result.get("analysis_notes", []),
             "transcript":                  result["transcript"],
             "mode":                        result["mode"],
+            "metrics_source":              result.get("metrics_source"),
+            "hesitation_count":            result.get("hesitation_count"),
+            "hesitation_rate":             result.get("hesitation_rate"),
+            "pause_rate_per_minute":       result.get("pause_rate_per_minute"),
+            "tone_proxy":                  result.get("tone_proxy"),
         }
 
         # Always update in-memory store

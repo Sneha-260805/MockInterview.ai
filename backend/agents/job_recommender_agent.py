@@ -124,7 +124,14 @@ def _load_jobs() -> list[JobListing]:
     try:
         with _JOBS_PATH.open("r", encoding="utf-8") as f:
             raw = json.load(f)
-        return [JobListing(**j) for j in raw]
+        jobs = []
+        for j in raw:
+            j.setdefault("source", "sample")
+            j.setdefault("is_live", False)
+            j.setdefault("is_fallback_sample", True)
+            j.setdefault("apply_url", "")
+            jobs.append(JobListing(**j))
+        return jobs
     except Exception as exc:
         logger.error("Failed to load sample_jobs.json: %s", exc)
         return []
@@ -280,9 +287,13 @@ async def recommend(
     """
     from agents.adzuna_job_fetcher import fetch_live_jobs
     jobs = await fetch_live_jobs(candidate_skills, candidate_level)
+    source = "adzuna"
+    fallback_reason = None
     if not jobs:
         logger.info("No live jobs fetched, using sample_jobs.json as fallback.")
         jobs = _load_jobs()
+        source = "sample"
+        fallback_reason = "Live job API credentials are missing or the provider returned no usable postings."
     if not jobs:
         return JobRecommendationResponse(
             candidate_id=candidate_id,
@@ -326,6 +337,12 @@ async def recommend(
                 matched_skills=matched,
                 missing_skills=missing,
                 why_fit=why,
+                explanation=why,
+                source=job.source,
+                apply_url=job.apply_url,
+                is_live=job.is_live,
+                is_fallback_sample=job.is_fallback_sample,
+                remote=job.remote,
             ),
         ))
 
@@ -337,4 +354,7 @@ async def recommend(
         candidate_id=candidate_id,
         total_jobs_analyzed=len(jobs),
         recommended_jobs=results,
+        source=source,
+        is_live=source != "sample",
+        fallback_reason=fallback_reason,
     )

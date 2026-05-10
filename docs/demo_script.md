@@ -188,6 +188,13 @@ After 3+ questions, **click:** "Generate Final Report"
 
 ---
 
+## Updated Judge Talking Points
+
+- The next question is selected by the central intelligence engine, not by frontend heuristics.
+- The adaptation trace explains topic choice, difficulty choice, and which technical/audio/video signals mattered.
+- If Adzuna credentials are configured, job cards are live postings with apply URLs. If not, cards are marked as sample/fallback jobs.
+- Audio/video labels are honest: fallback and proxy modes are visibly marked and are not presented as true emotion, gaze, or posture classifiers.
+
 ## Troubleshooting During Demo
 
 | Issue | Fix |

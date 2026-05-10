@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 
 class JobListing(BaseModel):
@@ -10,6 +10,11 @@ class JobListing(BaseModel):
     experience: str
     location: str
     description: str
+    source: str = "sample"
+    apply_url: str = ""
+    is_live: bool = False
+    is_fallback_sample: bool = True
+    remote: Optional[bool] = None
 
 
 class JobMatch(BaseModel):
@@ -24,9 +29,18 @@ class JobMatch(BaseModel):
     matched_skills: List[str]
     missing_skills: List[str]
     why_fit: str
+    source: str = "sample"
+    apply_url: str = ""
+    is_live: bool = False
+    is_fallback_sample: bool = True
+    remote: Optional[bool] = None
+    explanation: Optional[str] = None
 
 
 class JobRecommendationResponse(BaseModel):
     candidate_id: str
     total_jobs_analyzed: int
     recommended_jobs: List[JobMatch]
+    source: str = "sample"
+    is_live: bool = False
+    fallback_reason: Optional[str] = None

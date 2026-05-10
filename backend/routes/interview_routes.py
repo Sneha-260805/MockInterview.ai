@@ -12,6 +12,7 @@ from models.interview import (
 from models.analysis import ResumeAnalysis
 from agents import interview_orchestrator, evaluator_agent, feedback_agent
 from agents import intelligence_engine
+from services import question_generator, multimodal_aggregator
 from database import store
 from database.connection import get_db, is_using_memory
 
@@ -49,6 +50,15 @@ async def start_interview(body: StartInterviewRequest):
         selected_role=body.selected_role,
         analysis=analysis,
     )
+    if interview_plan:
+        first_q = await question_generator.generate_question(
+            role=body.selected_role,
+            topic=interview_plan[0].topic,
+            difficulty=interview_plan[0].difficulty,
+            analysis=analysis,
+        )
+        session.questions_asked = [first_q]
+        session.current_question = first_q
 
     candidate_state = intelligence_engine.initialize_candidate_state(
         session_id=session.session_id,
@@ -150,9 +160,18 @@ async def evaluate_answer(body: EvaluateAnswerRequest):
             try:
                 from models.agent_state import CandidateState
                 cs = CandidateState(**raw_state)
+                q_number = len(answers)
+                audio_score = multimodal_aggregator.latest_for_question(
+                    session_data.get("audio_scores", []), q_number
+                )
+                video_score = multimodal_aggregator.latest_for_question(
+                    session_data.get("video_scores", []), q_number
+                )
                 cs = intelligence_engine.update_candidate_state(
                     candidate_state=cs,
                     answer_record=answer_dict,
+                    audio_score=audio_score,
+                    video_score=video_score,
                 )
                 session_data["candidate_state"] = cs.model_dump()
             except Exception:
@@ -320,6 +339,22 @@ async def next_question(body: NextQuestionRequest):
 
     n_answered = len(session_data.get("answers", []))
     questions_asked = session_data.get("questions_asked", [])
+    if n_answered >= interview_orchestrator.MAX_QUESTIONS:
+        session_data["status"] = "completed"
+        store.save_session(body.session_id, session_data)
+        dummy = questions_asked[-1] if questions_asked else {
+            "question_id": "COMPLETE", "question": "", "difficulty": "easy",
+            "topic": "Session Complete", "expected_points": [],
+        }
+        return NextQuestionResponse(
+            next_question=dummy,
+            reason_for_adaptation="Session complete.",
+            session_complete=True,
+            questions_answered=n_answered,
+            max_questions=interview_orchestrator.MAX_QUESTIONS,
+            decision_trace=None,
+            candidate_state=session_data.get("candidate_state"),
+        )
 
     # ── Phase 11: Try intelligence engine first ────────────────────────────────
     decision_trace = None
@@ -329,6 +364,8 @@ async def next_question(body: NextQuestionRequest):
     raw_state = session_data.get("candidate_state")
     interview_plan_raw = session_data.get("interview_plan", [])
     answers = session_data.get("answers", [])
+    audio_scores = session_data.get("audio_scores", [])
+    video_scores = session_data.get("video_scores", [])
 
     if raw_state and answers:
         try:
@@ -337,6 +374,22 @@ async def next_question(body: NextQuestionRequest):
             plan = [InterviewPlanItem(**item) for item in interview_plan_raw]
             last_answer = answers[-1]
             current_q_dict = questions_asked[-1] if questions_asked else {}
+            q_number = len(answers)
+            audio_score = multimodal_aggregator.latest_for_question(audio_scores, q_number)
+            video_score = multimodal_aggregator.latest_for_question(video_scores, q_number)
+            role_fit_score = 70
+            candidate_id = session_data.get("candidate_id", "")
+            roles_data = store.get_roles(candidate_id) or {}
+            for role_item in roles_data.get("recommended_roles", []):
+                if role_item.get("role") == session_data.get("selected_role"):
+                    role_fit_score = int(role_item.get("match_score", 70))
+                    break
+            turn_multi = multimodal_aggregator.aggregate_turn(
+                last_answer.get("evaluation", {}),
+                audio_score,
+                video_score,
+                role_fit_score,
+            )
 
             trace = intelligence_engine.make_next_question_decision(
                 candidate_state=cs,
@@ -347,36 +400,39 @@ async def next_question(body: NextQuestionRequest):
                     {"question": questions_asked[i], "answer": answers[i]}
                     for i in range(min(len(questions_asked), len(answers)))
                 ],
+                audio_score=audio_score,
+                video_score=video_score,
+                multimodal_score=turn_multi,
             )
             decision_trace = trace
 
-            # Override the body with intelligence-engine-derived values
             reason = trace.reason_for_adaptation
-            next_difficulty = trace.next_difficulty
-            # Patch req so orchestrator uses intelligence-engine difficulty
-            body = NextQuestionRequest(
-                session_id=body.session_id,
-                last_answer_score=body.last_answer_score,
-                confidence_score=body.confidence_score,
-                current_topic=trace.next_topic or body.current_topic,
+            analysis = await _load_analysis(session_data.get("candidate_id", ""))
+            next_q = await question_generator.generate_question(
+                role=session_data.get("selected_role", ""),
+                topic=trace.next_topic or body.current_topic,
+                difficulty=trace.next_difficulty or "medium",
+                analysis=analysis,
+                previous_answer=last_answer.get("answer_text", ""),
+                previous_missing=last_answer.get("evaluation", {}).get("missing_points", []),
             )
+            last_answer["multimodal"] = turn_multi
 
         except Exception as exc:
             import logging as _lg
             _lg.getLogger(__name__).warning("Intelligence engine failed, using fallback: %s", exc)
 
-    # Fall back to existing orchestrator logic
-    next_q_result, orchestrator_reason, session_complete = await interview_orchestrator.next_question(
-        req=body, session_data=session_data
-    )
     if next_q is None:
+        # Fall back to existing orchestrator logic only when the intelligence engine
+        # cannot produce a trace/question.
+        next_q_result, orchestrator_reason, session_complete = await interview_orchestrator.next_question(
+            req=body, session_data=session_data
+        )
         next_q = next_q_result
-    if not reason:
-        reason = orchestrator_reason
-
-    # Prefer intelligence engine's reason if available
-    if decision_trace:
-        reason = decision_trace.reason_for_adaptation
+        if not reason:
+            reason = orchestrator_reason
+    else:
+        session_complete = n_answered >= interview_orchestrator.MAX_QUESTIONS
 
     if not session_complete:
         questions_asked.append(next_q.model_dump(mode="json"))

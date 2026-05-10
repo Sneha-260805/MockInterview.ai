@@ -1,0 +1,12 @@
+{
+  "candidate_id": "sample-candidate",
+  "recommended_roles": [
+    {
+      "role": "Full Stack Developer",
+      "match_score": 78,
+      "evidence": ["Matched skill: React", "Matched skill: Python"],
+      "interview_focus_areas": ["React & component design", "REST API development", "Database modeling"],
+      "weak_areas_to_probe": ["System design & scalability", "CI/CD pipelines", "Caching strategies"]
+    }
+  ]
+}

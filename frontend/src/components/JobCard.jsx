@@ -93,6 +93,20 @@ export default function JobCard({ job, candidateId }) {
         <div className="flex-1 min-w-0">
           <h3 className="text-base font-bold text-gray-900 leading-snug">{job.title}</h3>
           <p className="text-sm font-medium text-brand-600 mt-0.5">{job.company}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className={`inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+              job.is_live
+                ? "bg-green-50 text-green-700 border-green-200"
+                : "bg-amber-50 text-amber-700 border-amber-200"
+            }`}>
+              {job.is_live ? `Live via ${job.source || "provider"}` : "Sample / fallback job"}
+            </span>
+            {job.remote === true && (
+              <span className="inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
+                Remote
+              </span>
+            )}
+          </div>
 
           {/* Location + experience tags */}
           <div className="flex items-center flex-wrap gap-2 mt-2">
@@ -170,6 +184,16 @@ export default function JobCard({ job, candidateId }) {
 
       {/* ── Footer CTA ───────────────────────────────────────────────────── */}
       <div className="px-6 pb-6">
+        {job.apply_url && (
+          <a
+            href={job.apply_url}
+            target="_blank"
+            rel="noreferrer"
+            className="mb-2 w-full py-2.5 rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 hover:border-gray-300"
+          >
+            Apply / View Posting
+          </a>
+        )}
         <button
           onClick={handlePractice}
           className="w-full py-2.5 rounded-xl font-semibold text-sm transition-colors

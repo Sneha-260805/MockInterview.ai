@@ -335,6 +335,25 @@ overall = technical×0.45 + communication×0.20 + confidence×0.15
 
 ---
 
+## Hackathon Completion Notes
+
+- Dynamic question generation now uses `services/question_generator.py`. It uses an LLM when configured and otherwise returns deterministic, resume-aware questions labelled `deterministic_dynamic`.
+- The central intelligence engine drives next-topic and next-difficulty decisions. Decision traces include technical score, depth, communication clarity, confidence, pause/hesitation, video engagement, stress proxy, combined multimodal score, topic rationale, and difficulty rationale.
+- Multimodal aggregation is implemented in `services/multimodal_aggregator.py` with weights: technical 45%, communication 20%, confidence 15%, engagement 10%, role fit 10%.
+- Audio/video fallback modes are visibly labelled as heuristic/proxy-based and are not claimed as true emotion, gaze, or posture classifiers.
+- Job recommendations use live Adzuna postings when credentials are configured. Without live credentials, the UI marks recommendations as sample/fallback jobs.
+- Sample expected outputs live in `sample_data/expected_*.json` and `sample_data/expected_final_report.md`.
+
+### Test Commands
+
+```bash
+cd backend
+python -m pytest tests
+
+cd ../frontend
+npm run build
+```
+
 ## Development Notes
 
 ### Adding a new interview role

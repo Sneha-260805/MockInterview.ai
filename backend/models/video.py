@@ -22,3 +22,11 @@ class VideoAnalysisResponse(BaseModel):
     # Explainability
     analysis_notes:      Optional[List[str]] = None   # per-metric human-readable notes
     warning:             Optional[str]  = None         # e.g. "Not enough frames for stability"
+    face_presence:       Optional[bool] = None
+    face_presence_score: Optional[int] = None
+    eye_contact_proxy:   Optional[int]  = None
+    facial_expression_proxy: Optional[str] = None
+    posture_proxy:       Optional[int]  = None
+    stress_nervousness_indicator: Optional[str] = None
+    nervousness_score:   Optional[int] = None
+    metrics_source:      str = "heuristic"

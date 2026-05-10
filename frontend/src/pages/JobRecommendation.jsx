@@ -92,6 +92,12 @@ export default function JobRecommendation() {
       {status === STATUS.done && data && (
         <>
           {/* Stats banner */}
+          {!data.is_live && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm">
+              Showing sample/fallback jobs, not current live postings.
+              {data.fallback_reason ? ` ${data.fallback_reason}` : ""}
+            </div>
+          )}
           {data.recommended_jobs.length > 0 && (() => {
             const { strong, good, emerging } = scoreBucket(data.recommended_jobs);
             return (

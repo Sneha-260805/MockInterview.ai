@@ -1,0 +1,16 @@
+{
+  "candidate_id": "sample-candidate",
+  "skills": ["Python", "FastAPI", "React", "PostgreSQL", "Docker"],
+  "projects": [
+    {
+      "name": "Mock Interview Agent",
+      "technologies": ["Python", "FastAPI", "React"],
+      "summary": "Resume-aware adaptive interview platform."
+    }
+  ],
+  "experience": ["Built APIs and full-stack products."],
+  "experience_level": "mid",
+  "domains": ["Full Stack Web"],
+  "seniority_signals": ["Inferred mid level from resume chronology and role language"],
+  "certifications": []
+}
