@@ -110,6 +110,19 @@ def _extract_skills(text: str) -> list[str]:
     return list(found.values())
 
 
+# Verbs that start resume bullet descriptions — never project titles
+_DESC_START_RE = re.compile(
+    r"^(built|created|developed|implemented|designed|supervised|fine[\s\-]?tuned|"
+    r"benchmarked|used|performed|analyzed|analysed|trained|deployed|integrated|"
+    r"optimized|optimised|conducted|applied|worked|led|managed|collaborated|"
+    r"researched|engineered|architected|contributed|wrote|generated|evaluated|"
+    r"tested|validated|utilized|utilised|leveraged|produced|multi[\s\-]stage|"
+    r"composite|achieved|improved|reduced|increased|automated|migrated|"
+    r"established|responsible|tools?\s*:)",
+    re.IGNORECASE,
+)
+
+
 def _extract_projects(text: str) -> list[Project]:
     m = re.search(
         r"(?:projects?|personal projects?|key projects?|academic projects?)[:\s\n]+(.*?)"
@@ -148,28 +161,39 @@ def _extract_projects(text: str) -> list[Project]:
         if not line:
             continue
 
-        # Strip leading bullet markers (•, ●, ▪, *)
-        stripped = re.sub(r"^[•●▪\*]\s*", "", line).strip()
+        # Strip leading bullet/dash markers that PDF extraction may or may not preserve
+        clean = re.sub(r"^[•●▪\*]\s*", "", line).strip()
+        clean = re.sub(r"^[-–]\s+", "", clean).strip()
 
-        # A description line starts with "- " / "– ", or is indented in the raw text,
-        # or is a "Tools:" line — keep it attached to the current project.
-        is_desc = (
-            re.match(r"^[-–]\s+", stripped)
-            or re.match(r"^\s{2,}", raw)
-            or stripped.lower().startswith("tools:")
-        )
+        if not clean:
+            continue
 
-        if is_desc:
-            clean = re.sub(r"^[-–]\s*|^[Tt]ools?\s*:\s*", "", stripped).strip()
-            if clean and current_name:
+        # Hyphenation fragment: very short, starts lowercase → merge into last desc line
+        if len(clean) < 20 and clean[0].islower():
+            if current_desc:
+                current_desc[-1] = current_desc[-1].rstrip("-") + clean
+            continue
+
+        # Description line: starts with a known action verb or "Tools:"
+        # (PDF extraction often strips dashes/indentation so we rely on content)
+        if _DESC_START_RE.match(clean):
+            if current_name:
+                # Strip redundant "Tools: " prefix before storing
+                entry = re.sub(r"^[Tt]ools?\s*:\s*", "Tools: ", clean)
+                current_desc.append(entry)
+            continue
+
+        # Also treat lines that were originally indented/dashed in the raw text as desc
+        if re.match(r"^[-–]\s+", line) or re.match(r"^\s{2,}", raw):
+            if current_name:
                 current_desc.append(clean)
-        else:
-            # New project title — flush the previous one first
-            _flush()
-            # Remove trailing URLs from the title
-            title = re.sub(r"\s*(https?://\S+|github\.com/\S+|www\.\S+)", "", stripped).strip()
-            if len(title) > 3:
-                current_name = title
+            continue
+
+        # Remaining lines are project titles — flush the previous project first
+        _flush()
+        title = re.sub(r"\s*(https?://\S+|github\.com/\S+|www\.\S+)", "", clean).strip()
+        if len(title) > 3:
+            current_name = title
 
     _flush()
     return projects[:6]
