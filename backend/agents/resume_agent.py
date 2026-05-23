@@ -1,7 +1,11 @@
-"""Rule-based resume analysis. Works without any LLM key."""
+"""
+Resume Intelligence Agent.
+Rule-based analysis that produces interview-ready intelligence — not just a skill parser.
+Works without any LLM key; LLM layer in llm_service.py can enhance the output further.
+"""
 
 import re
-from models.analysis import ResumeAnalysis, Project
+from models.analysis import ResumeAnalysis, Project, ClaimToVerify, ProjectDeepDive
 
 # ── Skill registry ────────────────────────────────────────────────────────────
 
@@ -51,6 +55,21 @@ _SECTION_RE = re.compile(
     r"certifications?|achievements?|awards?|publications?)[\s:]*$",
     re.IGNORECASE,
 )
+
+# ── Domain skill sets (for scoring) ──────────────────────────────────────────
+
+_DOMAIN_SETS = {
+    "frontend":  {"javascript", "react", "angular", "vue.js", "vue", "html", "css", "typescript", "next.js"},
+    "backend":   {"python", "java", "node.js", "django", "fastapi", "flask", "spring", "express.js", "express", "c#", "go", "rust"},
+    "ml":        {"tensorflow", "pytorch", "keras", "deep learning", "machine learning", "nlp", "computer vision"},
+    "data":      {"pandas", "numpy", "scikit-learn", "r", "tableau", "statistics", "machine learning"},
+    "devops":    {"docker", "kubernetes", "aws", "azure", "gcp", "google cloud", "ci/cd", "terraform", "jenkins"},
+    "mobile":    {"ios", "android", "react native", "flutter", "swift", "kotlin"},
+    "de":        {"spark", "hadoop", "airflow", "kafka", "dbt", "snowflake", "databricks"},
+    "testing":   {"jest", "pytest", "junit", "selenium", "cypress", "playwright"},
+    "db":        {"sql", "postgresql", "mysql", "mongodb", "redis"},
+    "deployment":{"docker", "kubernetes", "aws", "azure", "gcp", "google cloud", "heroku", "netlify", "vercel"},
+}
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -170,13 +189,13 @@ def _extract_experience_level(text: str) -> str:
 def _infer_domains(skills: list[str]) -> list[str]:
     s = {sk.lower() for sk in skills}
 
-    fe = len(s & {"javascript", "react", "angular", "vue.js", "vue", "html", "css", "typescript", "next.js"})
-    be = len(s & {"python", "java", "node.js", "django", "fastapi", "flask", "spring", "express.js", "express", "c#", "go", "rust"})
-    ml = len(s & {"tensorflow", "pytorch", "keras", "deep learning", "machine learning", "nlp", "computer vision"})
-    ds = len(s & {"pandas", "numpy", "scikit-learn", "r", "tableau", "statistics", "machine learning"})
-    do = len(s & {"docker", "kubernetes", "aws", "azure", "gcp", "google cloud", "ci/cd", "terraform", "jenkins"})
-    mob = len(s & {"ios", "android", "react native", "flutter", "swift", "kotlin"})
-    de = len(s & {"spark", "hadoop", "airflow", "kafka", "dbt", "snowflake", "databricks"})
+    fe = len(s & _DOMAIN_SETS["frontend"])
+    be = len(s & _DOMAIN_SETS["backend"])
+    ml = len(s & _DOMAIN_SETS["ml"])
+    ds = len(s & _DOMAIN_SETS["data"])
+    do = len(s & _DOMAIN_SETS["devops"])
+    mob = len(s & _DOMAIN_SETS["mobile"])
+    de = len(s & _DOMAIN_SETS["de"])
 
     domains: list[str] = []
     if fe >= 2 and be >= 2:
@@ -247,6 +266,218 @@ def _infer_weak_areas(skills: list[str], domains: list[str]) -> list[str]:
     return weak[:3]
 
 
+# ── Intelligence functions ────────────────────────────────────────────────────
+
+def _extract_strong_skills(skills: list[str], domains: list[str]) -> list[str]:
+    """Return the candidate's top 5 most marketable skills given their domain."""
+    s_lower = {sk.lower() for sk in skills}
+    priority: list[str] = []
+
+    # High-value domain-specific skills (ordered by market demand)
+    high_value_order = [
+        "React", "TypeScript", "Node.js", "Python", "FastAPI", "Django",
+        "Docker", "Kubernetes", "AWS", "GCP", "Azure",
+        "TensorFlow", "PyTorch", "Machine Learning", "Deep Learning",
+        "PostgreSQL", "MongoDB", "Redis", "Kafka",
+        "Spark", "Airflow", "Flutter", "React Native",
+        "Next.js", "GraphQL", "Microservices", "Go",
+    ]
+    for skill in high_value_order:
+        if skill.lower() in s_lower:
+            priority.append(skill)
+        if len(priority) >= 5:
+            break
+
+    # Fall back to any skills if priority list is short
+    if len(priority) < 3:
+        for skill in skills:
+            if skill not in priority:
+                priority.append(skill)
+            if len(priority) >= 5:
+                break
+
+    return priority
+
+
+def _extract_role_signals(skills: list[str], projects: list[Project], domains: list[str]) -> list[str]:
+    """Infer explicit role signals from the resume content."""
+    s = {sk.lower() for sk in skills}
+    signals: list[str] = []
+
+    fe = len(s & _DOMAIN_SETS["frontend"])
+    be = len(s & _DOMAIN_SETS["backend"])
+    ml = len(s & _DOMAIN_SETS["ml"])
+    do = len(s & _DOMAIN_SETS["devops"])
+    mob = len(s & _DOMAIN_SETS["mobile"])
+    de = len(s & _DOMAIN_SETS["de"])
+
+    if fe >= 3 and be >= 2:
+        signals.append("Full-stack signals: strong frontend and backend skills present")
+    elif fe >= 3:
+        signals.append("Frontend signals: multiple UI/component framework skills")
+    elif be >= 3:
+        signals.append("Backend signals: server-side and data-layer skills present")
+    if ml >= 2:
+        signals.append("ML/AI signals: model training frameworks detected")
+    if do >= 2:
+        signals.append("DevOps signals: container and cloud tooling present")
+    if mob >= 1:
+        signals.append("Mobile signals: cross-platform or native mobile skills")
+    if de >= 2:
+        signals.append("Data engineering signals: pipeline and warehouse tools detected")
+    if len(projects) >= 2:
+        signals.append(f"Project evidence: {len(projects)} projects demonstrate hands-on experience")
+    if not ({"jest", "pytest", "cypress", "junit"} & s):
+        signals.append("No testing framework mentioned — gap signal")
+    if not (_DOMAIN_SETS["deployment"] & s):
+        signals.append("No deployment/cloud tools mentioned — gap signal")
+
+    return signals[:6]
+
+
+def _extract_claims_to_verify(skills: list[str], projects: list[Project], text: str) -> list[ClaimToVerify]:
+    """Generate verifiable claims from the resume — things to probe in an interview."""
+    s = {sk.lower() for sk in skills}
+    claims: list[ClaimToVerify] = []
+    text_lower = text.lower()
+
+    # Each project is a claim — verify depth
+    for project in projects[:3]:
+        p_lower = project.name.lower()
+        techs = ", ".join(project.technologies[:3]) if project.technologies else "various technologies"
+        missing_aspects: list[str] = []
+
+        # Check what is implied by the project but not mentioned
+        if "auth" not in text_lower and "login" not in text_lower and "jwt" not in text_lower:
+            missing_aspects.append("authentication")
+        if "deploy" not in text_lower and "hosting" not in text_lower:
+            missing_aspects.append("deployment")
+        if "test" not in text_lower:
+            missing_aspects.append("testing")
+        if "database" not in text_lower and "db" not in text_lower and not ({"sql", "mongodb", "postgresql"} & s):
+            missing_aspects.append("database design")
+
+        why = (
+            f"Resume lists {project.name} using {techs}, but "
+            + (f"does not mention {', '.join(missing_aspects[:2])}" if missing_aspects else "depth of implementation is unclear")
+        )
+        probe = (
+            f"Walk me through the architecture of {project.name} — "
+            f"how did you handle " + (f"{missing_aspects[0]} and data flow?" if missing_aspects else "the most complex technical challenge?")
+        )
+        claims.append(ClaimToVerify(
+            claim=f"Built {project.name} using {techs}",
+            why_verify=why,
+            probe_question=probe,
+        ))
+
+    # Skill-claim verifications
+    if "machine learning" in s or "deep learning" in s:
+        if "tensorflow" not in s and "pytorch" not in s and "scikit-learn" not in s:
+            claims.append(ClaimToVerify(
+                claim="Machine Learning / Deep Learning expertise",
+                why_verify="Resume mentions ML/DL but no specific framework (TensorFlow, PyTorch, Scikit-learn) is listed",
+                probe_question="Which ML frameworks have you used in practice and what kind of models did you train?",
+            ))
+
+    if "microservices" in s or "microservices" in text_lower:
+        if not ({"docker", "kubernetes", "kafka"} & s):
+            claims.append(ClaimToVerify(
+                claim="Microservices architecture experience",
+                why_verify="Microservices mentioned but no container or orchestration tooling found (Docker, Kubernetes, Kafka)",
+                probe_question="How did you handle service discovery, inter-service communication, and deployment in your microservices setup?",
+            ))
+
+    if "aws" in s or "azure" in s or "gcp" in s or "google cloud" in s:
+        cloud_services = [x for x in ["EC2", "S3", "Lambda", "RDS", "ECS"] if x.lower() in text_lower]
+        if not cloud_services:
+            claims.append(ClaimToVerify(
+                claim="Cloud platform (AWS/Azure/GCP) experience",
+                why_verify="Cloud provider mentioned but no specific services are listed in the resume",
+                probe_question="Which specific cloud services did you use and what did you build with them?",
+            ))
+
+    return claims[:4]
+
+
+def _extract_project_deep_dives(projects: list[Project], domains: list[str]) -> list[ProjectDeepDive]:
+    """Select best projects for interview deep-dives and suggest probe topics."""
+    if not projects:
+        return []
+
+    dives: list[ProjectDeepDive] = []
+
+    for i, project in enumerate(projects[:3]):
+        techs_lower = {t.lower() for t in project.technologies}
+
+        # Determine why this project was selected
+        if i == 0:
+            why = f"Most prominent project on resume — best evidence of technical capability"
+        elif len(project.technologies) >= 4:
+            why = f"Demonstrates breadth across {len(project.technologies)} technologies"
+        else:
+            why = f"Shows experience with {', '.join(project.technologies[:2])}"
+
+        # Generate probe topics based on tech stack
+        probe_topics: list[str] = []
+        if techs_lower & {"react", "vue.js", "angular", "next.js"}:
+            probe_topics += ["component architecture", "state management", "API integration"]
+        if techs_lower & {"node.js", "express", "django", "fastapi", "flask"}:
+            probe_topics += ["API design", "authentication", "error handling"]
+        if techs_lower & {"mongodb", "postgresql", "mysql", "sqlite"}:
+            probe_topics += ["database schema design", "query optimisation"]
+        if techs_lower & {"docker", "kubernetes", "aws"}:
+            probe_topics += ["deployment strategy", "scalability"]
+        if techs_lower & {"tensorflow", "pytorch", "scikit-learn"}:
+            probe_topics += ["model selection", "training pipeline", "evaluation metrics"]
+        if not probe_topics:
+            probe_topics = ["architecture decisions", "biggest technical challenge", "what you would improve"]
+
+        dives.append(ProjectDeepDive(
+            project=project.name,
+            why_selected=why,
+            probe_topics=probe_topics[:4],
+        ))
+
+    return dives
+
+
+def _extract_interview_risks(skills: list[str], projects: list[Project], level: str, text: str) -> list[str]:
+    """Identify resume signals that may indicate interview risks."""
+    s = {sk.lower() for sk in skills}
+    risks: list[str] = []
+    text_lower = text.lower()
+
+    if not ({"jest", "pytest", "junit", "selenium", "cypress"} & s) and "test" not in text_lower:
+        risks.append("No testing mentioned — may struggle with questions on test strategy")
+
+    if not (_DOMAIN_SETS["deployment"] & s) and "deploy" not in text_lower:
+        risks.append("No deployment experience visible — cloud/infra questions may be weak")
+
+    if level == "junior" and len(projects) == 0:
+        risks.append("No projects listed — insufficient evidence of hands-on skill")
+
+    if len(skills) < 5:
+        risks.append("Very few skills listed — breadth of technical knowledge may be limited")
+
+    if not ({"git", "github"} & s):
+        risks.append("Version control not mentioned — basic collaboration practice unclear")
+
+    if "system design" in text_lower or level == "senior":
+        if not ({"microservices", "kafka", "redis", "docker", "kubernetes"} & s):
+            risks.append("Senior/system design claims but limited distributed systems tooling visible")
+
+    return risks[:4]
+
+
+def _extract_suggested_probes(claims: list[ClaimToVerify], weak_areas: list[str]) -> list[str]:
+    """Combine claim probes and weak-area probes into a flat probe list."""
+    probes: list[str] = [c.probe_question for c in claims[:2]]
+    for w in weak_areas[:2]:
+        probes.append(f"Describe your experience with {w} — what have you learned or built?")
+    return probes[:4]
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def analyze(raw_text: str, candidate_id: str) -> ResumeAnalysis:
@@ -255,6 +486,14 @@ def analyze(raw_text: str, candidate_id: str) -> ResumeAnalysis:
     projects = _extract_projects(raw_text)
     exp_level = _extract_experience_level(raw_text)
     domains = _infer_domains(skills)
+    weak_areas = _infer_weak_areas(skills, domains)
+
+    strong_skills = _extract_strong_skills(skills, domains)
+    role_signals = _extract_role_signals(skills, projects, domains)
+    claims = _extract_claims_to_verify(skills, projects, raw_text)
+    deep_dives = _extract_project_deep_dives(projects, domains)
+    interview_risks = _extract_interview_risks(skills, projects, exp_level, raw_text)
+    suggested_probes = _extract_suggested_probes(claims, weak_areas)
 
     return ResumeAnalysis(
         candidate_id=candidate_id,
@@ -267,5 +506,11 @@ def analyze(raw_text: str, candidate_id: str) -> ResumeAnalysis:
         experience_level=exp_level,
         domains=domains,
         strengths=_infer_strengths(skills, projects, exp_level),
-        weak_areas=_infer_weak_areas(skills, domains),
+        weak_areas=weak_areas,
+        strong_skills=strong_skills,
+        role_signals=role_signals,
+        claims_to_verify=claims,
+        project_deep_dives=deep_dives,
+        interview_risks=interview_risks,
+        suggested_probes=suggested_probes,
     )

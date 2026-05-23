@@ -1,7 +1,10 @@
 """
 Adzuna live job fetcher.
-Fetches real live job postings from Adzuna API
-based on candidate skills and returns them as JobListing objects.
+Fetches real live job postings from Adzuna API based on candidate skills.
+
+Returns a tuple (jobs: list[JobListing], is_live: bool).
+is_live=True when jobs came from the Adzuna API.
+is_live=False (and empty list) when credentials are missing or the API fails.
 """
 
 import logging
@@ -13,10 +16,15 @@ logger = logging.getLogger(__name__)
 
 ADZUNA_BASE_URL = "https://api.adzuna.com/v1/api/jobs/in/search/1"
 
-async def fetch_live_jobs(candidate_skills: list[str], candidate_level: str) -> list[JobListing]:
+
+async def fetch_live_jobs(
+    candidate_skills: list[str],
+    candidate_level: str,
+) -> tuple[list[JobListing], bool]:
     """
     Fetch real jobs from Adzuna using candidate skills as keywords.
-    Returns a list of JobListing objects, or empty list if API fails.
+    Returns (job_list, is_live).
+    is_live=True when a successful live response was received.
     """
     settings = get_settings()
 
@@ -24,18 +32,17 @@ async def fetch_live_jobs(candidate_skills: list[str], candidate_level: str) -> 
     app_key = getattr(settings, "adzuna_app_key", None)
 
     if not app_id or not app_key:
-        logger.warning("Adzuna credentials missing. Falling back to sample jobs.")
-        return []
+        logger.warning("Adzuna credentials missing — falling back to sample jobs.")
+        return [], False
 
-    # Pick top 3 skills as search keywords
     keywords = " ".join(candidate_skills[:3]) if candidate_skills else "software developer"
 
     params = {
-        "app_id":         app_id,
-        "app_key":        app_key,
-        "results_per_page": 20,
-        "what":           keywords,
-        "content-type":   "application/json",
+        "app_id":             app_id,
+        "app_key":            app_key,
+        "results_per_page":   20,
+        "what":               keywords,
+        "content-type":       "application/json",
     }
 
     try:
@@ -44,9 +51,8 @@ async def fetch_live_jobs(candidate_skills: list[str], candidate_level: str) -> 
             response.raise_for_status()
             data = response.json()
 
-        jobs = []
+        jobs: list[JobListing] = []
         for i, item in enumerate(data.get("results", [])):
-            # Extract skills from description (simple keyword match)
             description = item.get("description", "")
             required_skills = _extract_skills_from_text(description, candidate_skills)
 
@@ -59,20 +65,21 @@ async def fetch_live_jobs(candidate_skills: list[str], candidate_level: str) -> 
                 description=description[:300] + "..." if len(description) > 300 else description,
                 required_skills=required_skills,
                 apply_url=item.get("redirect_url", ""),
+                is_live=True,
             ))
 
         logger.info("Fetched %d live jobs from Adzuna.", len(jobs))
-        return jobs
+        return jobs, True
 
     except Exception as exc:
         logger.error("Adzuna API call failed: %s", exc)
-        return []
+        return [], False
 
 
 def _extract_skills_from_text(text: str, candidate_skills: list[str]) -> list[str]:
     """
-    Simple skill extractor - checks which candidate skills appear in job description.
-    Also checks for common tech keywords.
+    Extract skills from job description text.
+    Checks candidate's own skills first, then a common tech list.
     """
     COMMON_SKILLS = [
         "Python", "JavaScript", "TypeScript", "React", "Node.js",
@@ -84,14 +91,12 @@ def _extract_skills_from_text(text: str, candidate_skills: list[str]) -> list[st
     ]
 
     text_lower = text.lower()
-    found = []
+    found: list[str] = []
 
-    # Check candidate's own skills first
     for skill in candidate_skills:
         if skill.lower() in text_lower and skill not in found:
             found.append(skill)
 
-    # Also check common skills
     for skill in COMMON_SKILLS:
         if skill.lower() in text_lower and skill not in found:
             found.append(skill)

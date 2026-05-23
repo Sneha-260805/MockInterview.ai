@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
 
 
@@ -10,6 +10,8 @@ class JobListing(BaseModel):
     experience: str
     location: str
     description: str
+    apply_url: str = ""       # direct application link (populated by Adzuna)
+    is_live: bool = False     # True = fetched from live API, False = sample/fallback
 
 
 class JobMatch(BaseModel):
@@ -24,9 +26,6 @@ class JobMatch(BaseModel):
     matched_skills: List[str]
     missing_skills: List[str]
     why_fit: str
-
-
-class JobRecommendationResponse(BaseModel):
-    candidate_id: str
-    total_jobs_analyzed: int
-    recommended_jobs: List[JobMatch]
+    apply_url: str = ""
+    is_live: bool = False      # clearly marked for demo transparency
+    application_readiness: str = ""   # recommended preparation steps

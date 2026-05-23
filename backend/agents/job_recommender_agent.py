@@ -5,13 +5,17 @@ Loads jobs from sample_data/sample_jobs.json, scores each job against
 the candidate's extracted skills, and returns the top matches with a
 natural-language explanation of why each job is a good fit.
 
+is_live flag
+------------
+Jobs fetched from Adzuna (live API) are tagged is_live=True.
+Jobs from sample_data/sample_jobs.json are tagged is_live=False.
+The JobMatch response includes this field so the UI can clearly show
+"Live Posting" vs "Demo / Sample Job" — no false claims.
+
 Matching algorithm
 ------------------
 1. Normalise both candidate skills and job required_skills to lowercase.
-2. For each required skill, check:
-      a. Exact match (after lowercasing).
-      b. Prefix match  — first 6 chars  (catches "postgresql" ≈ "postgres").
-      c. Alias lookup  — common display-name aliases.
+2. Exact canonical match (alias lookup handles react/reactjs, postgres/postgresql, etc.)
 3. Raw score = len(matched) / len(required) × 100.
 4. Experience-level bonus (+5 pts) when the candidate's seniority fits.
 5. Cap at 95 to avoid unrealistic perfect scores.
@@ -20,7 +24,7 @@ Matching algorithm
 Optional LLM path
 -----------------
 When USE_LLM=true and an Anthropic API key is set, the agent requests a
-richer, personalised why_fit blurb from Claude.  Rule-based why_fit is
+richer, personalised why_fit blurb from Claude. Rule-based why_fit is
 always generated as the fallback.
 """
 
@@ -33,11 +37,11 @@ from models.jobs import JobListing, JobMatch, JobRecommendationResponse
 logger = logging.getLogger(__name__)
 
 _JOBS_PATH  = Path(__file__).parent.parent / "sample_data" / "sample_jobs.json"
-_TOP_N      = 10          # maximum results returned
-_MIN_SCORE  = 20          # jobs below this threshold are filtered out
+_TOP_N      = 10
+_MIN_SCORE  = 20
 
 # ── Normalised skill aliases ───────────────────────────────────────────────────
-# Keys are canonical lowercase tokens; values are lists of accepted spellings.
+
 _ALIASES: dict[str, list[str]] = {
     "react":          ["react", "reactjs", "react.js"],
     "node":           ["node", "node.js", "nodejs"],
@@ -107,7 +111,6 @@ _ALIASES: dict[str, list[str]] = {
     "mvvm":           ["mvvm", "architecture"],
 }
 
-# Build reverse lookup: any alias string → canonical key
 _ALIAS_LOOKUP: dict[str, str] = {}
 for _canon, _variants in _ALIASES.items():
     for _v in _variants:
@@ -115,7 +118,6 @@ for _canon, _variants in _ALIASES.items():
 
 
 def _canonical(skill: str) -> str:
-    """Return the canonical token for a skill string."""
     sl = skill.lower().strip()
     return _ALIAS_LOOKUP.get(sl, sl)
 
@@ -151,22 +153,14 @@ def _match_skills(
     candidate_canonicals: set[str],
     required_skills: list[str],
 ) -> tuple[list[str], list[str]]:
-    """
-    Return (matched_display_list, missing_display_list).
-    Uses canonical tokens so prefix/alias mismatches are handled.
-    """
     matched: list[str] = []
     missing: list[str] = []
-
     for req in required_skills:
         req_canon = _canonical(req)
-        # Exact canonical match only. Alias lookup already handles common
-        # variants such as postgres/postgresql, react/reactjs, etc.
         if req_canon in candidate_canonicals:
             matched.append(req)
-            continue
-        missing.append(req)
-
+        else:
+            missing.append(req)
     return matched, missing
 
 
@@ -174,10 +168,40 @@ def _score(matched: list[str], total: int, exp_bonus: int) -> int:
     if total == 0:
         return 50
     raw = round(len(matched) / total * 100) + exp_bonus
-    return min(raw, 100)
+    return min(raw, 95)
 
 
-# ── Why-fit template ──────────────────────────────────────────────────────────
+# ── Application readiness ─────────────────────────────────────────────────────
+
+def _application_readiness(matched: list[str], missing: list[str], score: int) -> str:
+    top_miss = missing[:2]
+    if score >= 80:
+        if missing:
+            return (
+                f"Strong match — apply now. Consider adding {' and '.join(top_miss)} to your portfolio "
+                f"to make your application near-perfect."
+            )
+        return "Excellent match — apply now with confidence. You cover all core requirements."
+    if score >= 60:
+        if missing:
+            return (
+                f"Good match — apply. Brush up on {' and '.join(top_miss)} before the interview, "
+                f"as these are likely to be probed."
+            )
+        return "Good match — apply. Review the role's tech stack to tailor your cover letter."
+    if score >= 40:
+        return (
+            f"Apply with preparation. Spend 1–2 weeks building something with "
+            f"{top_miss[0] if top_miss else 'the required skills'} before your interview."
+        )
+    return (
+        f"Consider this a stretch goal. Build projects using "
+        f"{' and '.join(top_miss[:2]) if top_miss else 'the required skills'} "
+        f"before applying to be competitive."
+    )
+
+
+# ── Why-fit explanation ───────────────────────────────────────────────────────
 
 def _why_fit_rule(
     matched: list[str],
@@ -192,20 +216,22 @@ def _why_fit_rule(
     top_miss = missing[:2]
     match_str = ", ".join(top_m) if top_m else "general engineering skills"
     miss_str  = " and ".join(top_miss) if top_miss else ""
+    total_req = len(matched) + len(missing)
+    coverage = f"{len(matched)} of {total_req}" if total_req else "several"
 
     if score >= 80:
         base = (
             f"{name_clause} {match_str} skills align directly with the core requirements "
-            f"for this {title} role at {company}."
+            f"for this {title} role at {company} — covering {coverage} required skills."
         )
         return base + (
-            f" Adding {miss_str} would make you a near-perfect fit." if miss_str else
-            " You cover all key required skills — strong application recommended."
+            f" Adding {miss_str} would make this a near-perfect fit." if miss_str else
+            " All key required skills are covered — strong application recommended."
         )
     if score >= 60:
         base = (
             f"Good match for {company}'s {title} position. {name_clause} {match_str} "
-            f"skills cover {len(matched)} of the {len(matched) + len(missing)} requirements."
+            f"skills cover {coverage} requirements."
         )
         return base + (
             f" Strengthening {miss_str} would further boost your competitiveness." if miss_str else ""
@@ -213,12 +239,12 @@ def _why_fit_rule(
     if score >= 40:
         return (
             f"Emerging fit for this {title} role. {name_clause} {match_str} "
-            f"foundation is a good start; developing {miss_str or 'the remaining skills'} "
+            f"foundation is a good starting point — developing {miss_str or 'the remaining skills'} "
             f"will make your application much stronger."
         )
     return (
-        f"Stretch opportunity at {company}. {name_clause} current skills provide a "
-        f"foundational overlap, but significant upskilling in "
+        f"Stretch opportunity at {company}. {name_clause} current skills provide foundational overlap "
+        f"({coverage} required skills matched), but significant upskilling in "
         f"{miss_str or 'the required areas'} is needed."
     )
 
@@ -240,7 +266,7 @@ async def _llm_why_fit(
     try:
         import anthropic
         prompt = (
-            f"Write ONE concise sentence (max 35 words) explaining why this candidate "
+            f"Write ONE concise sentence (max 40 words) explaining why this candidate "
             f"is a good fit for the job. Be specific and mention matched skills.\n\n"
             f"Candidate: {candidate_name or 'the candidate'}\n"
             f"Candidate skills: {', '.join(candidate_skills[:10])}\n"
@@ -253,7 +279,7 @@ async def _llm_why_fit(
         )
         client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         response = await client.messages.create(
-            model="claude-sonnet-4-6", max_tokens=80,
+            model="claude-sonnet-4-6", max_tokens=100,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text.strip()
@@ -272,14 +298,17 @@ async def recommend(
     use_llm_blurb: bool = False,
 ) -> JobRecommendationResponse:
     """
-    Fetch live jobs from Adzuna first, fall back to sample_jobs.json
-    if API is unavailable.
+    Fetch live jobs from Adzuna first, fall back to sample_jobs.json if unavailable.
+    is_live=True for Adzuna results, is_live=False for sample fallback — clearly
+    distinguished in the response so the UI can display the source honestly.
     """
     from agents.adzuna_job_fetcher import fetch_live_jobs
-    jobs = await fetch_live_jobs(candidate_skills, candidate_level)
+    jobs, jobs_are_live = await fetch_live_jobs(candidate_skills, candidate_level)
     if not jobs:
-        logger.info("No live jobs fetched, using sample_jobs.json as fallback.")
+        logger.info("No live jobs fetched — using sample_jobs.json as fallback (is_live=False).")
         jobs = _load_jobs()
+        jobs_are_live = False
+
     if not jobs:
         return JobRecommendationResponse(
             candidate_id=candidate_id,
@@ -287,9 +316,7 @@ async def recommend(
             recommended_jobs=[],
         )
 
-    # Normalise candidate skills to canonical tokens once
     candidate_canonicals: set[str] = {_canonical(s) for s in candidate_skills}
-
     scored: list[tuple[int, JobMatch]] = []
 
     for job in jobs:
@@ -300,7 +327,6 @@ async def recommend(
         if sc < _MIN_SCORE:
             continue
 
-        # Generate why_fit
         why = None
         if use_llm_blurb:
             why = await _llm_why_fit(
@@ -308,6 +334,8 @@ async def recommend(
             )
         if not why:
             why = _why_fit_rule(matched, missing, sc, job.title, job.company, candidate_name)
+
+        readiness = _application_readiness(matched, missing, sc)
 
         scored.append((
             sc,
@@ -323,10 +351,12 @@ async def recommend(
                 matched_skills=matched,
                 missing_skills=missing,
                 why_fit=why,
+                apply_url=getattr(job, "apply_url", ""),
+                is_live=jobs_are_live,
+                application_readiness=readiness,
             ),
         ))
 
-    # Sort descending by score, take top N
     scored.sort(key=lambda t: -t[0])
     results = [match for _, match in scored[:_TOP_N]]
 

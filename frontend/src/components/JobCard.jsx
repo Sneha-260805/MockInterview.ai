@@ -15,7 +15,6 @@ function scoreBg(s) {
 
 /**
  * Map a job title to the closest mock-interview role available in the system.
- * Used for the "Practice Interview for This Role" button.
  */
 function mapToInterviewRole(title) {
   const t = title.toLowerCase();
@@ -61,22 +60,30 @@ function SkillChip({ label, variant }) {
   );
 }
 
+function LiveBadge({ isLive }) {
+  if (isLive) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-700 uppercase tracking-wider">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+        Live Posting
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200 text-gray-500 uppercase tracking-wider">
+      Sample Job
+    </span>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
-/**
- * JobCard
- *
- * Props:
- *   job         – JobMatch object from the API
- *   candidateId – used for the "Practice Interview" navigation
- */
 export default function JobCard({ job, candidateId }) {
   const navigate = useNavigate();
   const interviewRole = mapToInterviewRole(job.title);
 
   function handlePractice() {
     if (interviewRole) {
-      // Navigate to the roles page; the user picks the matching role and starts
       navigate(`/roles/${candidateId}`, {
         state: { highlightRole: interviewRole },
       });
@@ -91,10 +98,13 @@ export default function JobCard({ job, candidateId }) {
       {/* ── Header strip ─────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-4 border-b border-gray-100">
         <div className="flex-1 min-w-0">
-          <h3 className="text-base font-bold text-gray-900 leading-snug">{job.title}</h3>
-          <p className="text-sm font-medium text-brand-600 mt-0.5">{job.company}</p>
+          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+            <h3 className="text-base font-bold text-gray-900 leading-snug">{job.title}</h3>
+            <LiveBadge isLive={job.is_live} />
+          </div>
+          <p className="text-sm font-medium text-brand-600">{job.company}</p>
 
-          {/* Location + experience tags */}
+          {/* Location + experience */}
           <div className="flex items-center flex-wrap gap-2 mt-2">
             <span className="inline-flex items-center gap-1 text-xs text-gray-500">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -130,13 +140,18 @@ export default function JobCard({ job, candidateId }) {
         {/* ── Description ──────────────────────────────────────────────────── */}
         <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">{job.description}</p>
 
-        {/* ── Why fit ──────────────────────────────────────────────────────── */}
+        {/* ── Why this job fits ─────────────────────────────────────────────── */}
         <div className="flex items-start gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
           <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round"
               d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
           </svg>
-          <p className="text-xs text-indigo-800 leading-relaxed">{job.why_fit}</p>
+          <div>
+            <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-0.5">
+              Why this job fits
+            </p>
+            <p className="text-xs text-indigo-800 leading-relaxed">{job.why_fit}</p>
+          </div>
         </div>
 
         {/* ── Skills ───────────────────────────────────────────────────────── */}
@@ -166,10 +181,44 @@ export default function JobCard({ job, candidateId }) {
             </div>
           )}
         </div>
+
+        {/* ── Application readiness ─────────────────────────────────────────── */}
+        {job.application_readiness && (
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+            <svg className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+            </svg>
+            <div>
+              <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-0.5">
+                Recommended preparation
+              </p>
+              <p className="text-xs text-amber-800 leading-relaxed">{job.application_readiness}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Footer CTA ───────────────────────────────────────────────────── */}
-      <div className="px-6 pb-6">
+      <div className="px-6 pb-6 flex flex-col gap-2">
+        {/* Apply button (shown when apply_url is available) */}
+        {job.apply_url && (
+          <a
+            href={job.apply_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-2.5 rounded-xl font-semibold text-sm transition-colors
+              flex items-center justify-center gap-2
+              bg-green-600 hover:bg-green-700 text-white"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+            Apply Now
+          </a>
+        )}
+
+        {/* Practice interview */}
         <button
           onClick={handlePractice}
           className="w-full py-2.5 rounded-xl font-semibold text-sm transition-colors
@@ -180,7 +229,7 @@ export default function JobCard({ job, candidateId }) {
             <path strokeLinecap="round" strokeLinejoin="round"
               d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
           </svg>
-          {interviewRole ? `Practice Interview for ${interviewRole}` : "Practice Interview for This Role"}
+          {interviewRole ? `Practice for ${interviewRole}` : "Practice Interview"}
         </button>
       </div>
     </div>

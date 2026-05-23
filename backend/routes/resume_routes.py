@@ -94,7 +94,7 @@ async def analyze_resume(body: AnalyzeRequest):
         merged["candidate_id"] = body.candidate_id  # never override
         analysis = ResumeAnalysis(**merged)
 
-    roles = role_agent.recommend(analysis)
+    roles = role_agent.recommend(analysis, body.raw_text)
 
     # Persist both
     store.save_analysis(body.candidate_id, analysis.model_dump())

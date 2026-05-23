@@ -3,6 +3,7 @@ import { useParams, useLocation, Link, useNavigate } from "react-router-dom";
 import QuestionPanel from "../components/QuestionPanel";
 import EvaluationPanel from "../components/EvaluationPanel";
 import AdaptationBadge from "../components/AdaptationBadge";
+import AgentTracePanel from "../components/AgentTracePanel";
 import AudioRecorder from "../components/AudioRecorder";
 import VideoRecorder from "../components/VideoRecorder";
 import { getSession, evaluateAnswer, nextQuestion } from "../services/interviewService";
@@ -319,6 +320,20 @@ export default function InterviewRoom() {
             />
           )}
 
+          {/* Agent Decision Trace — shown from Q2 onward alongside adaptation badge */}
+          {adaptationReason && !isDone && history.length > 0 && (() => {
+            const lastEntry = history[history.length - 1];
+            return (
+              <AgentTracePanel
+                evaluation={lastEntry.evaluation}
+                adaptationReason={adaptationReason}
+                prevQuestion={lastEntry.question}
+                nextQuestion={activeQuestion}
+                confidenceScore={deriveConfidence(lastEntry.evaluation, lastEntry.answer)}
+              />
+            );
+          })()}
+
           {/* Active question */}
           {activeQuestion && (
             <QuestionPanel question={activeQuestion} index={questionNumber} />
@@ -411,6 +426,17 @@ export default function InterviewRoom() {
             <div ref={evalRef}>
               <EvaluationPanel evaluation={evaluation} />
             </div>
+          )}
+
+          {/* Agent Trace — shown after next-question is selected (Q2+) */}
+          {isDone && evaluation && adaptationReason && (
+            <AgentTracePanel
+              evaluation={evaluation}
+              adaptationReason={adaptationReason}
+              prevQuestion={activeQuestion}
+              nextQuestion={null}
+              confidenceScore={deriveConfidence(evaluation, submittedAnswer)}
+            />
           )}
 
           {/* Next question controls */}
