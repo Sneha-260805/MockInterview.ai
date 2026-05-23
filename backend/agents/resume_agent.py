@@ -112,45 +112,67 @@ def _extract_skills(text: str) -> list[str]:
 
 def _extract_projects(text: str) -> list[Project]:
     m = re.search(
-        r"(?:projects?|personal projects?|key projects?)[:\s\n]+(.*?)"
-        r"(?=\n(?:education|experience|skills?|certifications?|awards?)|$)",
+        r"(?:projects?|personal projects?|key projects?|academic projects?)[:\s\n]+(.*?)"
+        r"(?=\n\s*(?:education|experience|skills?|certifications?|awards?|achievements?)\b|$)",
         text,
         re.IGNORECASE | re.DOTALL,
     )
     if not m:
         return []
 
-    blocks = re.split(r"\n(?=[A-Z•\-*\d])", m.group(1))
     projects: list[Project] = []
+    current_name: str | None = None
+    current_desc: list[str] = []
 
-    for block in blocks[:6]:
-        block = block.strip()
-        if len(block) < 10:
-            continue
-        lines = [l.strip() for l in block.split("\n") if l.strip()]
-        if not lines:
-            continue
-
-        name = re.sub(r"^[\d\.\-•*\s]+", "", lines[0]).strip()
-        if not name:
-            continue
-
-        description = " ".join(lines[1:]) if len(lines) > 1 else ""
-        block_lower = block.lower()
+    def _flush() -> None:
+        nonlocal current_name, current_desc
+        if not current_name:
+            return
+        description = " ".join(current_desc)
+        full_lower = (current_name + " " + description).lower()
         techs = [
             _SKILLS_MAP[k]
             for k in _SKILLS_MAP
-            if re.search(r"\b" + re.escape(k) + r"\b", block_lower)
+            if re.search(r"\b" + re.escape(k) + r"\b", full_lower)
         ]
-        projects.append(
-            Project(
-                name=name,
-                technologies=techs[:8],
-                summary=(description[:200] if description else "No description available."),
-            )
+        projects.append(Project(
+            name=current_name,
+            technologies=techs[:8],
+            summary=description[:200] if description else "No description available.",
+        ))
+        current_name = None
+        current_desc = []
+
+    for raw in m.group(1).split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+
+        # Strip leading bullet markers (•, ●, ▪, *)
+        stripped = re.sub(r"^[•●▪\*]\s*", "", line).strip()
+
+        # A description line starts with "- " / "– ", or is indented in the raw text,
+        # or is a "Tools:" line — keep it attached to the current project.
+        is_desc = (
+            re.match(r"^[-–]\s+", stripped)
+            or re.match(r"^\s{2,}", raw)
+            or stripped.lower().startswith("tools:")
         )
 
-    return projects
+        if is_desc:
+            clean = re.sub(r"^[-–]\s*|^[Tt]ools?\s*:\s*", "", stripped).strip()
+            if clean and current_name:
+                current_desc.append(clean)
+        else:
+            # New project title — flush the previous one first
+            _flush()
+            # Remove trailing URLs from the title
+            title = re.sub(r"\s*(https?://\S+|github\.com/\S+|www\.\S+)", "", stripped).strip()
+            if len(title) > 3:
+                current_name = title
+
+    _flush()
+    return projects[:6]
 
 
 def _extract_education(text: str) -> str:
