@@ -46,7 +46,7 @@ async def fetch_live_jobs(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=6) as client:
             response = await client.get(ADZUNA_BASE_URL, params=params)
             response.raise_for_status()
             data = response.json()

@@ -29,3 +29,9 @@ class JobMatch(BaseModel):
     apply_url: str = ""
     is_live: bool = False      # clearly marked for demo transparency
     application_readiness: str = ""   # recommended preparation steps
+
+
+class JobRecommendationResponse(BaseModel):
+    candidate_id: str
+    total_jobs_analyzed: int
+    recommended_jobs: List[JobMatch]
