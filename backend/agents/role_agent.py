@@ -78,7 +78,7 @@ def _score(skills_lower: set[str], role_def: dict) -> tuple[int, list[str]]:
     bonus_hits = [b for b in role_def["bonus"] if b in skills_lower]
     max_pts = len(role_def["core"]) * _CORE_W + len(role_def["bonus"]) * _BONUS_W
     raw = len(core_hits) * _CORE_W + len(bonus_hits) * _BONUS_W
-    score = min(int(raw / max_pts * 100), 95) if max_pts else 0
+    score = min(int(raw / max_pts * 100), 100) if max_pts else 0
     return score, core_hits[:3] + bonus_hits[:2]
 
 

@@ -160,16 +160,9 @@ def _match_skills(
 
     for req in required_skills:
         req_canon = _canonical(req)
-        # Exact canonical match
+        # Exact canonical match only. Alias lookup already handles common
+        # variants such as postgres/postgresql, react/reactjs, etc.
         if req_canon in candidate_canonicals:
-            matched.append(req)
-            continue
-        # 6-char prefix match among candidate skills
-        if any(
-            c.startswith(req_canon[:6]) or req_canon.startswith(c[:6])
-            for c in candidate_canonicals
-            if len(c) >= 4 and len(req_canon) >= 4
-        ):
             matched.append(req)
             continue
         missing.append(req)
@@ -181,7 +174,7 @@ def _score(matched: list[str], total: int, exp_bonus: int) -> int:
     if total == 0:
         return 50
     raw = round(len(matched) / total * 100) + exp_bonus
-    return min(raw, 95)
+    return min(raw, 100)
 
 
 # ── Why-fit template ──────────────────────────────────────────────────────────
