@@ -12,7 +12,7 @@ This is **not a chatbot**. It is a resume-aware, role-aware, adaptive interview 
 | Capability | What the system does |
 |---|---|
 | **Resume Intelligence** | Extracts skills, projects, seniority, domains — then generates *claims to verify*, *deep-dive candidates*, *interview risks*, and *probe questions* |
-| **Explainable Role Matching** | Scores each role with resume evidence, identified gaps, and a role-type classification (Realistic / Stretch / Aspirational) |
+| **Agentic Role Selection** | Claude reads the resume and selects the best-fit roles — ordered by fit, not just keyword overlap. Can surface a custom role not in the catalog (e.g. "NLP Research Engineer") with resume-specific evidence, focus areas, and gaps |
 | **Live Job Recommendations** | Fetches live postings via Adzuna API; falls back to curated sample jobs (always clearly labelled as live or fallback) |
 | **Adaptive Interview Engine** | Generates personalised first questions from your resume; adapts difficulty after every answer based on score + confidence |
 | **Agent Decision Trace** | Shows the agent's full reasoning chain — observation → evidence → decision → why → next action |
@@ -51,7 +51,7 @@ Final Feedback Report (radar chart · learning plan · per-question breakdown)
 | # | Feature | Implementation |
 |---|---------|----------------|
 | 1 | Resume Intelligence | Rule-based + optional LLM enhancement |
-| 2 | Role Recommendations | Weighted skill scoring + evidence + gaps |
+| 2 | Agentic Role Selection | Claude selects + orders roles; injects custom role if resume shows a specialisation not in catalog; rule-based scoring fallback |
 | 3 | Live Job Recommendations | Adzuna API (fallback: sample_jobs.json) |
 | 4 | Adaptive Interview | LLM question generation + static bank fallback |
 | 5 | Agent Decision Trace | Frontend-rendered from backend scores + reason |
@@ -273,8 +273,9 @@ mock-interview-agent/
 │  resume_agent      → skills, projects, claims_to_verify,   │
 │                       project_deep_dives, interview_risks   │
 │                                                             │
-│  role_agent        → match_score, why_fit, resume_evidence, │
-│                       gaps, role_type                       │
+│  role_agent        → LLM selects roles + custom role;       │
+│                       match_score, why_fit, resume_evidence,│
+│                       gaps, role_type (Realistic/Stretch)   │
 │                                                             │
 │  job_recommender   → match_score, why_fit, is_live,        │
 │  + adzuna_fetcher    apply_url, application_readiness       │
