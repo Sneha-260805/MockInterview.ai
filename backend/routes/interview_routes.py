@@ -455,6 +455,7 @@ async def next_question(body: NextQuestionRequest):
                 audio_score,
                 video_score,
                 role_fit_score,
+                role=session_data.get("selected_role", ""),
             )
 
             trace = intelligence_engine.make_next_question_decision(

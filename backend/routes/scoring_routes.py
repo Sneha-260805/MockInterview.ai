@@ -94,6 +94,13 @@ async def analyze_audio(
             "hesitation_rate":             result.get("hesitation_rate"),
             "pause_rate_per_minute":       result.get("pause_rate_per_minute"),
             "tone_proxy":                  result.get("tone_proxy"),
+            # Rich orchestrator fields (Member 2 multimodal intelligence)
+            "recommendation_to_orchestrator": result.get("recommendation_to_orchestrator"),
+            "coaching_tip":                result.get("coaching_tip"),
+            "audio_reasoning_summary":     result.get("audio_reasoning_summary"),
+            "pace_label":                  result.get("pace_label"),
+            "detected_issue":              result.get("detected_issue"),
+            "speaking_rate_wpm":           result.get("words_per_minute"),
         }
 
         # Always update in-memory store
@@ -158,6 +165,21 @@ async def analyze_video(
             "stability_score":   result.get("stability_score"),
             "movement_activity": result.get("movement_activity"),
             "mode":              result["mode"],
+            # Rich orchestrator fields (Member 2 multimodal intelligence)
+            "recommendation_to_orchestrator": result.get("recommendation_to_orchestrator"),
+            "visual_reasoning_summary":       result.get("visual_reasoning_summary"),
+            "nervousness_proxy_score":        result.get("nervousness_proxy_score"),
+            "looking_away_proxy_score":       result.get("looking_away_proxy_score"),
+            "posture_proxy_score":            result.get("posture_proxy_score"),
+            "eye_contact_proxy_score":        result.get("eye_contact_proxy_score"),
+            "stress_indicator":               result.get("stress_indicator"),
+            "stress_nervousness_indicator":   result.get("stress_nervousness_indicator"),
+            "analysis_notes":                 result.get("analysis_notes", []),
+            "frames_analyzed":                result.get("frames_analyzed"),
+            "face_detection_rate":            result.get("face_detection_rate"),
+            "face_presence_score":            result.get("face_presence_score"),
+            "face_centering_score":           result.get("face_centering_score"),
+            "movement_stability_score":       result.get("movement_stability_score"),
         }
         store.append_video_score(session_id, video_entry)
 
@@ -264,6 +286,18 @@ async def analyze_combined(
                 "analysis_notes":              audio_result.get("analysis_notes", []),
                 "transcript":                  audio_result["transcript"],
                 "mode":                        audio_result["mode"],
+                # Rich orchestrator fields (Member 2 multimodal intelligence)
+                "metrics_source":              audio_result.get("metrics_source"),
+                "hesitation_count":            audio_result.get("hesitation_count"),
+                "hesitation_rate":             audio_result.get("hesitation_rate"),
+                "pause_rate_per_minute":       audio_result.get("pause_rate_per_minute"),
+                "tone_proxy":                  audio_result.get("tone_proxy"),
+                "recommendation_to_orchestrator": audio_result.get("recommendation_to_orchestrator"),
+                "coaching_tip":                audio_result.get("coaching_tip"),
+                "audio_reasoning_summary":     audio_result.get("audio_reasoning_summary"),
+                "pace_label":                  audio_result.get("pace_label"),
+                "detected_issue":              audio_result.get("detected_issue"),
+                "speaking_rate_wpm":           audio_result.get("words_per_minute"),
             }
             store.append_audio_score(session_id, audio_entry)
 
@@ -275,6 +309,21 @@ async def analyze_combined(
             "stability_score":   video_result.get("stability_score"),
             "movement_activity": video_result.get("movement_activity"),
             "mode":              video_result["mode"],
+            # Rich orchestrator fields (Member 2 multimodal intelligence)
+            "recommendation_to_orchestrator": video_result.get("recommendation_to_orchestrator"),
+            "visual_reasoning_summary":       video_result.get("visual_reasoning_summary"),
+            "nervousness_proxy_score":        video_result.get("nervousness_proxy_score"),
+            "looking_away_proxy_score":       video_result.get("looking_away_proxy_score"),
+            "posture_proxy_score":            video_result.get("posture_proxy_score"),
+            "eye_contact_proxy_score":        video_result.get("eye_contact_proxy_score"),
+            "stress_indicator":               video_result.get("stress_indicator"),
+            "stress_nervousness_indicator":   video_result.get("stress_nervousness_indicator"),
+            "analysis_notes":                 video_result.get("analysis_notes", []),
+            "frames_analyzed":                video_result.get("frames_analyzed"),
+            "face_detection_rate":            video_result.get("face_detection_rate"),
+            "face_presence_score":            video_result.get("face_presence_score"),
+            "face_centering_score":           video_result.get("face_centering_score"),
+            "movement_stability_score":       video_result.get("movement_stability_score"),
         }
         store.append_video_score(session_id, video_entry)
 
