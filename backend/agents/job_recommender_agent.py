@@ -138,19 +138,52 @@ def _load_jobs() -> list[JobListing]:
         return []
 
 
-# ── Experience-level matching ─────────────────────────────────────────────────
+# ── Seniority alignment ───────────────────────────────────────────────────────
 
-_EXP_BANDS = {
-    "junior":  {"0-1 years", "0-2 years", "1-2 years"},
-    "mid":     {"1-3 years", "2-3 years", "2-4 years"},
-    "senior":  {"3-5 years", "4-6 years", "5+ years", "5-7 years"},
-}
+def _seniority_fit(candidate_level: str, job_experience: str, job_title: str) -> int:
+    """
+    Returns 0–10 points based on how well the candidate's seniority matches
+    the job's required level. Title keywords take priority; experience band
+    is the fallback.
 
+    Fit matrix (job_level, candidate_level) → points:
+      junior/junior=10  junior/mid=4   junior/senior=0
+      mid/junior=5      mid/mid=10     mid/senior=5
+      senior/junior=0   senior/mid=6   senior/senior=10
+    """
+    title = job_title.lower()
 
-def _exp_bonus(candidate_level: str, job_exp: str) -> int:
-    level = candidate_level.lower()
-    target_bands = _EXP_BANDS.get(level, set())
-    return 5 if job_exp in target_bands else 0
+    if any(w in title for w in ("intern", "internship", "entry-level", "entry level")):
+        job_level = "junior"
+    elif "junior" in title or " jr " in title or title.startswith("jr "):
+        job_level = "junior"
+    elif any(w in title for w in ("senior", " sr ", "lead ", "principal", "staff")):
+        job_level = "senior"
+    else:
+        exp = job_experience.lower()
+        if any(x in exp for x in ("0-1", "0-2", "1-2", "1-3")):
+            job_level = "junior"
+        elif any(x in exp for x in ("5+", "4-6", "5-7", "6+", "7+")):
+            job_level = "senior"
+        else:
+            job_level = "mid"
+
+    cand = candidate_level.lower() if candidate_level else "mid"
+    if cand not in ("junior", "mid", "senior"):
+        cand = "mid"
+
+    _FIT: dict[tuple[str, str], int] = {
+        ("junior", "junior"): 10,
+        ("junior", "mid"):     4,
+        ("junior", "senior"):  0,
+        ("mid",    "junior"):  5,
+        ("mid",    "mid"):    10,
+        ("mid",    "senior"):  5,
+        ("senior", "junior"):  0,
+        ("senior", "mid"):     6,
+        ("senior", "senior"): 10,
+    }
+    return _FIT.get((job_level, cand), 5)
 
 
 # ── Skill matching ────────────────────────────────────────────────────────────
@@ -185,11 +218,60 @@ def _match_skills(
     return matched, missing
 
 
-def _score(matched: list[str], total: int, exp_bonus: int) -> int:
+def _score(
+    matched: list[str],
+    missing: list[str],
+    required: list[str],
+    candidate_canonicals: set[str],
+    candidate_level: str,
+    job: "JobListing",
+) -> int:
+    """
+    Multi-factor deterministic scorer — no randomness, no LLM.
+
+    Factor                Range      Description
+    ─────────────────────────────────────────────────────────────
+    Core skill ratio      0–50 pts   matched / total required
+    Priority skill bonus  0–18 pts   top-3 required skills (+6 each if matched)
+    Seniority fit         0–10 pts   candidate level vs job seniority signals
+    Specialisation bonus  0–7  pts   skills in positions 4+ that are matched
+    Gap penalty           0–10 pts   deducted for proportion of unmet requirements
+    ─────────────────────────────────────────────────────────────
+    Practical range ≈ 15–85, clamped to [_MIN_SCORE, 95].
+    """
+    total = len(required)
     if total == 0:
         return 50
-    raw = round(len(matched) / total * 100) + exp_bonus
-    return min(raw, 95)
+
+    # 1. Core skill ratio (0–50 pts)
+    ratio_pts = round(len(matched) / total * 50)
+
+    # 2. Priority skill bonus — the first three required skills are most critical (0–18 pts)
+    priority_pts = 0
+    for req in required[:3]:
+        rc = _canonical(req)
+        if rc in candidate_canonicals:
+            priority_pts += 6
+        elif len(rc) >= 4 and any(c[:6] == rc[:6] for c in candidate_canonicals if len(c) >= 4):
+            priority_pts += 6
+
+    # 3. Seniority alignment (0–10 pts)
+    seniority_pts = _seniority_fit(candidate_level, job.experience, job.title)
+
+    # 4. Specialisation bonus — niche skills (position 4 onwards) that are matched (0–7 pts)
+    spec_count = sum(
+        1 for req in required[3:]
+        if _canonical(req) in candidate_canonicals
+        or (len(_canonical(req)) >= 4
+            and any(c[:6] == _canonical(req)[:6] for c in candidate_canonicals if len(c) >= 4))
+    )
+    spec_pts = min(spec_count * 2, 7)
+
+    # 5. Gap penalty — proportional to unmet requirements (0–10 pts deducted)
+    gap_penalty = round(len(missing) / total * 10)
+
+    raw = ratio_pts + priority_pts + seniority_pts + spec_pts - gap_penalty
+    return max(_MIN_SCORE, min(95, raw))
 
 
 # ── Why-fit template ──────────────────────────────────────────────────────────
@@ -309,8 +391,7 @@ async def recommend(
     intermediate: list[dict] = []
     for job in jobs:
         matched, missing = _match_skills(candidate_canonicals, job.required_skills)
-        bonus = _exp_bonus(candidate_level, job.experience)
-        sc = _score(matched, len(job.required_skills), bonus)
+        sc = _score(matched, missing, job.required_skills, candidate_canonicals, candidate_level, job)
         if sc < _MIN_SCORE:
             continue
         intermediate.append({
