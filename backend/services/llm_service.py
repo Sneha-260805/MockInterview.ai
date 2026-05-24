@@ -100,3 +100,90 @@ Return ONLY a JSON object with these exact keys. Be concise — each string shou
         logger.warning("LLM enhancement skipped: %s", exc)
 
     return None
+
+
+async def select_roles_llm(
+    raw_text: str,
+    available_roles: list[str],
+    candidate_skills: list[str],
+    experience_level: str,
+) -> dict | None:
+    """
+    Ask Claude to act as a career agent: read the resume, pick the most suitable
+    roles from the catalog, and optionally surface one custom role the catalog misses.
+
+    Returns:
+      {
+        "selected_roles": ["Role A", "Role B", ...],   # ordered best-first
+        "custom_role": {                                # None if not applicable
+          "name": "...", "match_score": int, "why_fit": "...",
+          "focus_areas": [...], "probing": [...],
+          "resume_evidence": [...], "gaps": [...]
+        }
+      }
+    or None on failure — rule-based fallback is used.
+    """
+    settings = get_settings()
+    if not settings.use_llm or not settings.anthropic_api_key:
+        return None
+
+    try:
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+        roles_list = "\n".join(f"- {r}" for r in available_roles)
+        skills_str = ", ".join(candidate_skills[:20])
+
+        prompt = f"""You are a senior career advisor acting as an intelligent agent.
+
+Candidate resume (first 2500 chars):
+{raw_text[:2500]}
+
+Detected skills: {skills_str}
+Experience level: {experience_level}
+
+Available role catalog:
+{roles_list}
+
+Your task:
+1. Select the 3-5 roles from the catalog that BEST match this specific candidate. Order them best-fit first.
+2. Decide if this candidate has a clear specialisation NOT covered by the catalog \
+(e.g. "NLP Research Engineer", "Prompt Engineer", "Computer Vision Engineer"). \
+If yes, define it as a custom role with specific evidence from the resume. \
+If no clear specialisation exists beyond the catalog, set custom_role to null.
+
+Return ONLY valid JSON — no explanation, no markdown:
+{{
+  "selected_roles": ["exact role name from catalog", ...],
+  "custom_role": {{
+    "name": "Specific Role Title",
+    "match_score": <integer 0-100>,
+    "why_fit": "One to two sentences using specific resume evidence.",
+    "focus_areas": ["topic1", "topic2", "topic3"],
+    "probing": ["probe area 1", "probe area 2", "probe area 3"],
+    "resume_evidence": ["specific evidence 1", "specific evidence 2", "specific evidence 3"],
+    "gaps": ["gap 1", "gap 2"]
+  }}
+}}
+
+If no custom role applies: "custom_role": null"""
+
+        response = await client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        content = response.content[0].text
+        m = re.search(r"\{.*\}", content, re.DOTALL)
+        if m:
+            result = json.loads(m.group(0))
+            valid = set(available_roles)
+            result["selected_roles"] = [
+                r for r in result.get("selected_roles", []) if r in valid
+            ]
+            return result
+    except Exception as exc:
+        logger.warning("LLM role selection skipped: %s", exc)
+
+    return None

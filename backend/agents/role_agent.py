@@ -288,69 +288,97 @@ def _build_why_fit(role: str, matched_display: list[str], score: int, level: str
     )
 
 
-def recommend(analysis: ResumeAnalysis, raw_text: str = "") -> RoleRecommendationResponse:
+async def recommend(analysis: ResumeAnalysis, raw_text: str = "") -> RoleRecommendationResponse:
+    from services.llm_service import select_roles_llm
+
     skills_lower = {s.lower() for s in analysis.skills}
     text_lower = raw_text.lower() if raw_text else " ".join(analysis.skills).lower()
-    scored: list[RoleMatch] = []
 
+    # ── Step 1: Rule-based scoring across all roles ───────────────────────────
+    all_scored: dict[str, RoleMatch] = {}
     for rd in _ROLES:
         score, matched = _score(skills_lower, rd)
-        if score < 10:
-            continue
         disp = _display(matched, analysis.skills)
         reason = rd["tpl"].format(
             matched=", ".join(disp[:4]) if disp else "relevant technical skills"
         )
-        role_type = _determine_role_type(score)
-        why_fit = _build_why_fit(rd["role"], disp, score, analysis.experience_level)
-        resume_evidence = _build_resume_evidence(rd, analysis.skills, analysis.projects, text_lower)
-        gaps = _build_gaps(rd, skills_lower)
-
-        scored.append(
-            RoleMatch(
-                role=rd["role"],
-                match_score=score,
-                reason=reason,
-                focus_areas=rd["focus_areas"],
-                weak_areas_to_probe=rd["probing"],
-                role_type=role_type,
-                why_fit=why_fit,
-                resume_evidence=resume_evidence,
-                gaps=gaps,
-            )
+        all_scored[rd["role"]] = RoleMatch(
+            role=rd["role"],
+            match_score=score,
+            reason=reason,
+            focus_areas=rd["focus_areas"],
+            weak_areas_to_probe=rd["probing"],
+            role_type=_determine_role_type(score),
+            why_fit=_build_why_fit(rd["role"], disp, score, analysis.experience_level),
+            resume_evidence=_build_resume_evidence(rd, analysis.skills, analysis.projects, text_lower),
+            gaps=_build_gaps(rd, skills_lower),
         )
 
-    scored.sort(key=lambda r: r.match_score, reverse=True)
+    # ── Step 2: LLM agent selects + optionally adds a custom role ────────────
+    catalog_names = [rd["role"] for rd in _ROLES]
+    llm_result = await select_roles_llm(
+        raw_text, catalog_names, analysis.skills, analysis.experience_level
+    )
 
-    # Guarantee at least 2 results
+    if llm_result and llm_result.get("selected_roles"):
+        # Use LLM-ordered selection (filter out any below score 5)
+        scored = [
+            all_scored[name]
+            for name in llm_result["selected_roles"]
+            if name in all_scored and all_scored[name].match_score >= 5
+        ]
+
+        # Inject custom role at the correct position by score
+        cr = llm_result.get("custom_role")
+        if cr and cr.get("name"):
+            custom_score = min(int(cr.get("match_score", 70)), 100)
+            custom_match = RoleMatch(
+                role=cr["name"],
+                match_score=custom_score,
+                reason=cr.get("why_fit", ""),
+                focus_areas=cr.get("focus_areas", []),
+                weak_areas_to_probe=cr.get("probing", []),
+                role_type=_determine_role_type(custom_score),
+                why_fit=cr.get("why_fit", ""),
+                resume_evidence=cr.get("resume_evidence", []),
+                gaps=cr.get("gaps", []),
+            )
+            # Insert sorted by score
+            scored.append(custom_match)
+            scored.sort(key=lambda r: r.match_score, reverse=True)
+    else:
+        # Rule-based fallback: filter by threshold and sort by score
+        scored = sorted(
+            [rm for rm in all_scored.values() if rm.match_score >= 10],
+            key=lambda r: r.match_score,
+            reverse=True,
+        )
+
+    # ── Step 3: Guarantee at least 2 results ─────────────────────────────────
     if len(scored) == 0:
-        scored.append(
-            RoleMatch(
-                role="Software Developer",
-                match_score=50,
-                reason="General software development skills detected across the resume.",
-                focus_areas=["Problem solving", "Clean code practices", "Algorithm fundamentals"],
-                weak_areas_to_probe=["System design", "Testing strategy", "Cloud platform basics"],
-                role_type="realistic",
-                why_fit="Candidate has general software development skills. A broader skill assessment will be needed to identify a specific specialisation.",
-                resume_evidence=["Technical skills present in resume"],
-                gaps=["Specialised domain skills not clearly demonstrated", "Project evidence limited"],
-            )
-        )
+        scored.append(RoleMatch(
+            role="Software Developer",
+            match_score=50,
+            reason="General software development skills detected across the resume.",
+            focus_areas=["Problem solving", "Clean code practices", "Algorithm fundamentals"],
+            weak_areas_to_probe=["System design", "Testing strategy", "Cloud platform basics"],
+            role_type="realistic",
+            why_fit="Candidate has general software development skills. A broader skill assessment will identify a specific specialisation.",
+            resume_evidence=["Technical skills present in resume"],
+            gaps=["Specialised domain skills not clearly demonstrated", "Project evidence limited"],
+        ))
     if len(scored) == 1:
-        scored.append(
-            RoleMatch(
-                role="Technical Support Engineer",
-                match_score=40,
-                reason="Technical background is well-suited for support, debugging, and documentation roles.",
-                focus_areas=["Debugging & root-cause analysis", "Technical documentation", "Customer empathy"],
-                weak_areas_to_probe=["Automation scripting", "Network fundamentals", "Cloud service basics"],
-                role_type="stretch",
-                why_fit="Technical background provides a foundation for support engineering, though hands-on product development experience would strengthen the candidacy.",
-                resume_evidence=["Technical skills visible in resume"],
-                gaps=["Customer-facing experience not mentioned", "Support tooling not listed"],
-            )
-        )
+        scored.append(RoleMatch(
+            role="Technical Support Engineer",
+            match_score=40,
+            reason="Technical background suits support, debugging, and documentation roles.",
+            focus_areas=["Debugging & root-cause analysis", "Technical documentation", "Customer empathy"],
+            weak_areas_to_probe=["Automation scripting", "Network fundamentals", "Cloud service basics"],
+            role_type="stretch",
+            why_fit="Technical background provides a foundation for support engineering.",
+            resume_evidence=["Technical skills visible in resume"],
+            gaps=["Customer-facing experience not mentioned", "Support tooling not listed"],
+        ))
 
     return RoleRecommendationResponse(
         candidate_id=analysis.candidate_id,
