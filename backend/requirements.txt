@@ -15,7 +15,8 @@ pymongo==4.9.1             # sync dependency of motor
 pymupdf==1.24.11           # PDF text extraction (imported as fitz)
 
 # ── LLM (optional) ───────────────────────────────────────────────────
-anthropic==0.34.2          # only used when USE_LLM=true; safe to leave installed
+groq>=1.2.0                # primary LLM provider (free tier) — used when USE_LLM=true
+anthropic==0.34.2          # kept for reference; replaced by groq
 
 # ── Audio transcription (optional) ───────────────────────────────────
 # Uncomment ONE of the following to enable real Whisper transcription.

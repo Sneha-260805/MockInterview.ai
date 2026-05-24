@@ -12,9 +12,10 @@ class Settings(BaseSettings):
 
     frontend_url: str = "http://localhost:5173"
 
-    # Optional LLM support — set USE_LLM=true and provide the key to enable
+    # Optional LLM support — set USE_LLM=true and provide GROQ_API_KEY to enable
     use_llm: bool = False
-    anthropic_api_key: str = ""
+    groq_api_key: str = ""
+    anthropic_api_key: str = ""  # kept for backward compatibility
 
     # Adzuna live job API
     adzuna_app_id: str = ""
