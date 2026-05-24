@@ -27,11 +27,18 @@ _SKILL_LIST = [
     "Docker", "Kubernetes", "Jenkins", "GitHub Actions", "GitLab CI",
     "Terraform", "Ansible", "Prometheus", "Grafana", "Nginx",
     "CI/CD", "Linux", "Bash",
-    # ML / AI
+    # ML / AI (core frameworks)
     "TensorFlow", "PyTorch", "Keras", "Scikit-learn", "XGBoost",
     "Pandas", "NumPy", "Matplotlib", "Seaborn",
     "Machine Learning", "Deep Learning", "NLP", "Computer Vision",
-    "OpenCV", "Hugging Face", "LangChain", "LLM",
+    "OpenCV", "LangChain", "LLM",
+    # ML / AI (modern LLM & NLP stack)
+    "HuggingFace", "Hugging Face", "Transformers",
+    "BERT", "DistilBERT", "Sentence Transformers",
+    "RAG", "Retrieval Augmented Generation",
+    "Gemini", "Llama", "LLaMA",
+    "Groq API", "Agentic AI", "AI Agents",
+    "MLflow", "Weights & Biases",
     # Data Engineering
     "Spark", "Hadoop", "Airflow", "Kafka", "dbt", "Snowflake", "Databricks",
     "Tableau", "Power BI", "Looker", "R",
@@ -61,7 +68,12 @@ _SECTION_RE = re.compile(
 _DOMAIN_SETS = {
     "frontend":  {"javascript", "react", "angular", "vue.js", "vue", "html", "css", "typescript", "next.js"},
     "backend":   {"python", "java", "node.js", "django", "fastapi", "flask", "spring", "express.js", "express", "c#", "go", "rust"},
-    "ml":        {"tensorflow", "pytorch", "keras", "deep learning", "machine learning", "nlp", "computer vision"},
+    "ml":        {
+        "tensorflow", "pytorch", "keras", "deep learning", "machine learning",
+        "nlp", "computer vision", "huggingface", "hugging face", "transformers",
+        "llm", "langchain", "bert", "distilbert", "rag", "sentence transformers",
+        "gemini", "llama", "llama", "agentic ai",
+    },
     "data":      {"pandas", "numpy", "scikit-learn", "r", "tableau", "statistics", "machine learning"},
     "devops":    {"docker", "kubernetes", "aws", "azure", "gcp", "google cloud", "ci/cd", "terraform", "jenkins"},
     "mobile":    {"ios", "android", "react native", "flutter", "swift", "kotlin"},
@@ -118,9 +130,35 @@ _DESC_START_RE = re.compile(
     r"researched|engineered|architected|contributed|wrote|generated|evaluated|"
     r"tested|validated|utilized|utilised|leveraged|produced|multi[\s\-]stage|"
     r"composite|achieved|improved|reduced|increased|automated|migrated|"
-    r"established|responsible|tools?\s*:)",
+    r"established|responsible|explored|demonstrated|extracted|preprocessed|"
+    r"curated|collected|transformed|predicted|classified|focused|combined|"
+    r"enabled|introduced|extended|gathered|processed|compared|evaluated|"
+    r"constructed|formulated|proposed|proposed|simulated|calculated|"
+    r"tools?\s*:|tech(?:nologies)?\s*:|stack\s*:|languages?\s*:)",
     re.IGNORECASE,
 )
+
+
+def _looks_like_title(line: str) -> bool:
+    """Return True if this line looks like a project title rather than a description."""
+    words = line.split()
+    if not words:
+        return False
+    # Very long lines are descriptions, not titles
+    if len(line) > 120:
+        return False
+    # Lines with 2+ commas are technology/skill lists → description
+    if line.count(",") >= 2:
+        return False
+    # Action verbs → description (caught earlier, but double-check)
+    if _DESC_START_RE.match(line):
+        return False
+    # Starts with lowercase → description
+    if line[0].islower():
+        return False
+    # Title-case check: >50% of words must start with uppercase
+    cap_count = sum(1 for w in words if w and w[0].isupper())
+    return (cap_count / len(words)) >= 0.5
 
 
 def _extract_projects(text: str) -> list[Project]:
@@ -178,7 +216,6 @@ def _extract_projects(text: str) -> list[Project]:
         # (PDF extraction often strips dashes/indentation so we rely on content)
         if _DESC_START_RE.match(clean):
             if current_name:
-                # Strip redundant "Tools: " prefix before storing
                 entry = re.sub(r"^[Tt]ools?\s*:\s*", "Tools: ", clean)
                 current_desc.append(entry)
             continue
@@ -189,7 +226,14 @@ def _extract_projects(text: str) -> list[Project]:
                 current_desc.append(clean)
             continue
 
-        # Remaining lines are project titles — flush the previous project first
+        # If we already have an open project and this line doesn't look like a
+        # new project title, treat it as description (catches tech lists, result
+        # sentences, and any verbs not in _DESC_START_RE)
+        if current_name and not _looks_like_title(clean):
+            current_desc.append(clean)
+            continue
+
+        # Remaining lines are new project titles — flush the previous project first
         _flush()
         title = re.sub(r"\s*(https?://\S+|github\.com/\S+|www\.\S+)", "", clean).strip()
         if len(title) > 3:
