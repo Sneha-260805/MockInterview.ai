@@ -43,7 +43,13 @@ async def start_interview(body: StartInterviewRequest):
     analysis = await _load_analysis(body.candidate_id)
 
     # ── Phase 11: Build interview plan & initialise candidate state ────────────
-    interview_plan = intelligence_engine.build_interview_plan(analysis, body.selected_role)
+    # Phase 6: try LLM-synthesised topics first; fall back to deterministic on failure
+    llm_topics = await intelligence_engine.synthesize_mastery_topics_with_llm(
+        body.selected_role, analysis
+    )
+    interview_plan = intelligence_engine.build_interview_plan(
+        analysis, body.selected_role, llm_topics=llm_topics
+    )
 
     # Generate the first question (existing logic)
     session, first_q = await interview_orchestrator.start_session(
@@ -57,6 +63,7 @@ async def start_interview(body: StartInterviewRequest):
             topic=interview_plan[0].topic,
             difficulty=interview_plan[0].difficulty,
             analysis=analysis,
+            question_type_hint=interview_plan[0].question_type or "",
         )
         session.questions_asked = [first_q]
         session.current_question = first_q
@@ -67,6 +74,7 @@ async def start_interview(body: StartInterviewRequest):
         selected_role=body.selected_role,
         resume_analysis=analysis,
         interview_plan=interview_plan,
+        llm_topics=llm_topics,
     )
 
     # Agent summary for UI
@@ -146,12 +154,16 @@ async def evaluate_answer(body: EvaluateAnswerRequest):
             doc.pop("_id", None)
             session_data = doc
 
-    # Inject topic into request for rubric scoring
+    # Inject topic and question_type into request for profile-aware rubric scoring.
+    # Priority: body value (if non-empty) > session-stored question value > "".
     if session_data:
         questions_asked = session_data.get("questions_asked", [])
         for q in questions_asked:
             if q.get("question_id") == body.question_id:
-                body = body.model_copy(update={"topic": q.get("topic", "")})
+                body = body.model_copy(update={
+                    "topic":         body.topic         or q.get("topic", ""),
+                    "question_type": body.question_type or q.get("question_type") or "",
+                })
                 break
 
     result = await evaluator_agent.evaluate(body)
@@ -190,6 +202,7 @@ async def evaluate_answer(body: EvaluateAnswerRequest):
                     answer_record=answer_dict,
                     audio_score=audio_score,
                     video_score=video_score,
+                    question_type=body.question_type or "",
                 )
                 session_data["candidate_state"] = cs.model_dump()
             except Exception:
@@ -241,13 +254,16 @@ async def improve_answer(body: ImproveAnswerRequest):
     if not session_data:
         raise HTTPException(status_code=404, detail="Session not found.")
 
-    # Resolve topic from session if not provided
+    # Resolve topic and question_type from session.
+    # Always look up session data so question_type is never lost even when
+    # the frontend has already provided the topic.
     topic = body.topic or ""
-    if not topic:
-        for q in session_data.get("questions_asked", []):
-            if q.get("question_id") == body.question_id:
-                topic = q.get("topic", "")
-                break
+    question_type = ""
+    for q in session_data.get("questions_asked", []):
+        if q.get("question_id") == body.question_id:
+            topic = topic or q.get("topic", "")
+            question_type = q.get("question_type") or ""
+            break
 
     # Build evaluation request for improved answer
     eval_req = EvaluateAnswerRequest(
@@ -257,6 +273,7 @@ async def improve_answer(body: ImproveAnswerRequest):
         answer=body.improved_answer,
         expected_points=body.expected_points,
         topic=topic,
+        question_type=question_type,
     )
 
     new_result = await evaluator_agent.evaluate(eval_req)
@@ -335,6 +352,7 @@ async def improve_answer(body: ImproveAnswerRequest):
                 previous_evaluation=body.previous_evaluation,
                 audio_score=audio_score,
                 video_score=video_score,
+                question_type=question_type,
             )
             session_data["candidate_state"] = cs.model_dump()
         except Exception:

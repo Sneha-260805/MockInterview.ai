@@ -11,6 +11,7 @@ Pure Python — no external dependencies, no LLM required.
 """
 
 import logging
+import re
 from typing import Optional
 
 from models.agent_state import (
@@ -69,6 +70,682 @@ _SKILL_TOPIC_MAP: dict[str, str] = {
     # Mobile
     "react native": "React Native Internals", "flutter": "Platform APIs",
 }
+
+# ── Phase 2: Resume-aware topic maps ─────────────────────────────────────────
+# Maps resume skill keywords → personalized interview topic names.
+# More-specific (longer) entries must come BEFORE less-specific ones so the
+# first-match-wins loop selects the right topic for compound skills
+# (e.g. "react native" is checked before "react").
+# Short keywords (len ≤ 3) use \b word-boundary matching in _keyword_matches()
+# to avoid false positives (e.g. "rag" must not match "storage").
+
+_RESUME_TOPIC_MAP: dict[str, str] = {
+    # ── Compound / specific entries first ─────────────────────────────────────
+    "react native":          "React Native Internals",
+    "vector database":       "Vector Search",
+    "vector db":             "Vector Search",
+    "vector store":          "Vector Search",
+    "sentence transformer":  "Embeddings & Representations",
+    "sentence-transformer":  "Embeddings & Representations",
+    "data augmentation":     "Data Augmentation",
+    "image classif":         "CNN Architecture",
+    "object detect":         "CNN Architecture",
+    "computer vision":       "CNN Architecture",
+    "retrieval augmented":   "RAG Pipeline Design",
+    "prompt engineer":       "Prompt Engineering",
+    "context window":        "Prompt Engineering",
+    "llama index":           "LLM Application Design",
+    "llamaindex":            "LLM Application Design",
+    "weights & biases":      "MLOps & Experiment Tracking",
+    # ── LLM / RAG cluster ─────────────────────────────────────────────────────
+    "langchain":             "LLM Application Design",
+    "openai":                "LLM Application Design",
+    "anthropic":             "LLM Application Design",
+    "gemini":                "LLM Application Design",
+    "llm":                   "LLM Application Design",
+    "rag":                   "RAG Pipeline Design",
+    "faiss":                 "Vector Search",
+    "pinecone":              "Vector Search",
+    "weaviate":              "Vector Search",
+    "chroma":                "Vector Search",
+    "milvus":                "Vector Search",
+    "qdrant":                "Vector Search",
+    "embedding":             "Embeddings & Representations",
+    "hugging face":          "Transformer Architecture",
+    "transformers":          "Transformer Architecture",
+    # ── Computer Vision cluster ───────────────────────────────────────────────
+    "cnn":                   "CNN Architecture",
+    "convolutional":         "CNN Architecture",
+    "resnet":                "CNN Architecture",
+    "yolo":                  "CNN Architecture",
+    "opencv":                "CNN Architecture",
+    # ── Training frameworks ───────────────────────────────────────────────────
+    "pytorch":               "PyTorch Training",
+    "tensorflow":            "Deep Learning Frameworks",
+    "keras":                 "Deep Learning Frameworks",
+    "jax":                   "Deep Learning Frameworks",
+    # ── MLOps / deployment ────────────────────────────────────────────────────
+    "mlflow":                "MLOps & Experiment Tracking",
+    "wandb":                 "MLOps & Experiment Tracking",
+    "kubeflow":              "MLOps & Experiment Tracking",
+    "bentoml":               "Model Deployment",
+    "torchserve":            "Model Deployment",
+    # ── Backend web cluster ───────────────────────────────────────────────────
+    "fastapi":               "API Design",
+    "flask":                 "API Design",
+    "django":                "API Design",
+    "express":               "API Design",
+    "graphql":               "API Design",
+    "redis":                 "Caching with Redis",
+    "jwt":                   "Authentication & Authorization",
+    "oauth":                 "Authentication & Authorization",
+    "postgresql":            "Database Indexing",
+    "mysql":                 "Database Indexing",
+    "mongodb":               "NoSQL Data Modelling",
+    "docker":                "Containerization & Deployment",
+    # ── Frontend cluster ──────────────────────────────────────────────────────
+    "react":                 "React State Management",  # after "react native"
+    "redux":                 "React State Management",
+    "zustand":               "React State Management",
+    "css":                   "Responsive Layout",
+    "tailwind":              "Responsive Layout",
+    "typescript":            "TypeScript & Type Safety",
+    # ── DevOps / Cloud cluster ────────────────────────────────────────────────
+    "kubernetes":            "Container Orchestration",
+    "terraform":             "Infrastructure as Code",
+    "prometheus":            "Observability & Monitoring",
+    "grafana":               "Observability & Monitoring",
+    # ── Data Engineering cluster ──────────────────────────────────────────────
+    "spark":                 "Distributed Processing",
+    "airflow":               "Pipeline Orchestration",
+    "kafka":                 "Stream Processing",
+    "snowflake":             "Data Warehousing",
+    "dbt":                   "Data Transformation",
+    "databricks":            "Data Warehousing",
+    # ── Data Science / ML cluster ─────────────────────────────────────────────
+    "scikit":                "Model Selection & Evaluation",
+    "xgboost":               "Model Selection & Evaluation",
+    "lightgbm":              "Model Selection & Evaluation",
+    "pandas":                "Data Wrangling & EDA",
+    "numpy":                 "Data Wrangling & EDA",
+}
+
+# Maps curriculum topic → set of personalized topics that conceptually replace it.
+# Prevents including both a generic curriculum topic and its resume-specific equivalent.
+_CURRICULUM_SUPERSEDED_BY: dict[str, set[str]] = {
+    # ML / AI Engineer
+    "Transfer Learning":        {"LLM Application Design", "Transformer Architecture"},
+    "Deep Learning":            {"CNN Architecture", "PyTorch Training",
+                                 "Deep Learning Frameworks", "Transformer Architecture"},
+    "MLOps":                    {"MLOps & Experiment Tracking"},
+    "Model Serving":            {"Model Deployment", "Vector Search"},
+    "Continual Learning":       set(),
+    # Data Scientist
+    "Model Selection":          {"Model Selection & Evaluation"},
+    "Evaluation Metrics":       {"Model Selection & Evaluation"},
+    "Practical ML":             {"RAG Pipeline Design", "PyTorch Training",
+                                 "Data Wrangling & EDA"},
+    "Model Theory":             {"CNN Architecture", "Transformer Architecture"},
+    "Experimentation":          set(),
+    # Full Stack / Backend
+    "REST Fundamentals":        {"API Design"},
+    "Database Design":          {"Database Indexing", "NoSQL Data Modelling"},
+    "Database":                 {"Database Indexing", "NoSQL Data Modelling"},
+    "Authentication":           {"Authentication & Authorization"},
+    "Performance Optimization": {"Caching with Redis"},
+    "Performance":              {"Caching with Redis"},
+    "System Design":            set(),
+    "API Design":               {"API Design"},
+    "Concurrency":              set(),
+    # Frontend
+    "React Internals":          {"React State Management"},
+    "CSS Fundamentals":         {"Responsive Layout"},
+    "Rendering Strategies":     set(),
+    "Frontend Architecture":    set(),
+    # DevOps
+    "Container Fundamentals":   set(),
+    "Kubernetes":               {"Container Orchestration"},
+    "Cloud Architecture":       set(),
+    "Security":                 {"Authentication & Authorization"},
+    "Observability":            {"Observability & Monitoring"},
+    # Data Engineering
+    "Processing Paradigms":     {"Distributed Processing"},
+    "Pipeline Design":          {"Pipeline Orchestration", "Stream Processing"},
+    "Data Quality":             set(),
+    "Data Modelling":           {"NoSQL Data Modelling"},
+    # Mobile
+    "React Native Internals":   {"React Native Internals"},
+    "Platform APIs":            set(),
+    "Offline Architecture":     set(),
+}
+
+
+# ── Phase 1: Question mix policy helpers ─────────────────────────────────────
+
+
+def classify_question_category(
+    topic: str = "",
+    question_type: Optional[str] = None,
+    decision_type: Optional[str] = None,
+) -> str:
+    """
+    Classify a question into 'project' | 'concept' | 'behavioral'.
+
+    Behavioral wins first (explicit type or decision_type).
+    Project: topic contains 'Project Deep Dive', OR question_type is
+             'project_deep_dive'.  verify_resume_claim / claim_verification
+             is project ONLY when the topic itself is a project topic — Redis,
+             API, auth, RAG follow-ups stay as 'concept'.
+    Everything else → 'concept'.
+    """
+    topic_lower = (topic or "").lower().strip()
+    qt = (question_type or "").lower().strip()
+    dt = (decision_type or "").lower().strip()
+
+    # ── Behavioral ────────────────────────────────────────────────────────────
+    if qt == "behavioral" or dt == "behavioral_probe":
+        return "behavioral"
+    if "behavioral" in topic_lower and "communication" in topic_lower:
+        return "behavioral"
+    if topic_lower == "behavioral & communication":
+        return "behavioral"
+
+    # ── Project ───────────────────────────────────────────────────────────────
+    if qt == "project_deep_dive":
+        return "project"
+    if "project deep dive" in topic_lower:
+        return "project"
+    # claim_verification is project ONLY when topic is explicitly project-style.
+    # Redis / API / Auth / RAG / embedding follow-ups are concept follow-ups.
+    if dt in ("verify_resume_claim", "claim_verification"):
+        if "project" in topic_lower or "deep dive" in topic_lower:
+            return "project"
+        return "concept"
+
+    return "concept"
+
+
+def count_question_categories(items: list) -> dict:
+    """
+    Count 'project' | 'concept' | 'behavioral' across a mixed list.
+
+    Items may be:
+      - InterviewPlanItem instances (have .topic, .question_type)
+      - session-history dicts  {"question": {"topic": ..., "question_type": ...}}
+      - plain dicts            {"topic": ..., "question_type": ..., "decision_type": ...}
+    """
+    counts: dict = {"project": 0, "concept": 0, "behavioral": 0}
+    for item in items:
+        if hasattr(item, "topic"):                       # InterviewPlanItem
+            topic = getattr(item, "topic", "") or ""
+            qt    = getattr(item, "question_type", None) or ""
+            dt    = ""
+        elif isinstance(item, dict):
+            if "question" in item and isinstance(item.get("question"), dict):
+                # session history: {"question": {...}, "answer": {...}}
+                q = item["question"]
+            else:
+                q = item
+            topic = (q.get("topic") or "")
+            qt    = (q.get("question_type") or "")
+            dt    = (q.get("decision_type") or item.get("decision_type") or "")
+        else:
+            continue
+        cat = classify_question_category(topic, qt, dt)
+        counts[cat] = counts.get(cat, 0) + 1
+    return counts
+
+
+def should_allow_project_question(
+    session_history: list,
+    max_project: int = 2,
+) -> bool:
+    """Return True when the project quota has not yet been reached."""
+    return count_question_categories(session_history).get("project", 0) < max_project
+
+
+def should_prioritize_concept_question(
+    session_history: list,
+    remaining_slots: int,
+    min_concept: int = 3,
+) -> bool:
+    """Return True when concept questions must be prioritised to hit the minimum."""
+    concept_so_far = count_question_categories(session_history).get("concept", 0)
+    needed = max(0, min_concept - concept_so_far)
+    return needed > 0 and needed >= remaining_slots
+
+
+# ── Phase 2: Dynamic resume-aware curriculum ─────────────────────────────────
+
+
+def _keyword_matches(keyword: str, token: str) -> bool:
+    """
+    Return True when `keyword` appears in `token`.
+    Very short acronyms (len ≤ 3) use \\b word-boundary matching to avoid
+    false positives (e.g. 'rag' must NOT match 'storage', 'cnn' must NOT
+    match 'scanner').  Longer keywords use plain substring matching.
+    """
+    if len(keyword) <= 3:
+        return bool(re.search(r"\b" + re.escape(keyword) + r"\b", token))
+    return keyword in token
+
+
+def _resume_aware_curriculum(role: str, analysis) -> list[str]:
+    """
+    Build a personalised 5–7 topic list from resume signals + role curriculum.
+
+    Algorithm:
+    1. Gather skill tokens (skills + project technologies) from the resume.
+    2. Map each token to a personalised topic via _RESUME_TOPIC_MAP (first-match-wins).
+    3. Determine which curriculum topics are superseded by the personalised set.
+    4. Fill remaining slots (up to 7) from curriculum topics not yet represented.
+
+    "Project Deep Dive" is always excluded — handled as a separate plan step.
+    Fallback: if fewer than 2 personalised topics are found the raw curriculum
+    is returned so the plan stays coherent for thin resumes.
+    """
+    curriculum = [t for t in _ROLE_CURRICULUM.get(role, []) if t != "Project Deep Dive"]
+
+    if not analysis:
+        return curriculum[:6]
+
+    skills = list(getattr(analysis, "skills", []) or [])
+    projects = list(getattr(analysis, "projects", []) or [])
+
+    # Build a deduplicated list of lowercase skill tokens (skills + project techs)
+    seen_tokens: set[str] = set()
+    skill_tokens: list[str] = []
+    for s in skills:
+        sl = s.lower()
+        if sl not in seen_tokens:
+            seen_tokens.add(sl)
+            skill_tokens.append(sl)
+    for proj in projects[:3]:
+        for tech in getattr(proj, "technologies", []):
+            tl = tech.lower()
+            if tl not in seen_tokens:
+                seen_tokens.add(tl)
+                skill_tokens.append(tl)
+
+    # Map each token to a personalised topic (first matching keyword wins)
+    seen_topics: set[str] = set()
+    personalized: list[str] = []
+
+    for token in skill_tokens:
+        for keyword, topic in _RESUME_TOPIC_MAP.items():
+            if _keyword_matches(keyword, token):
+                if topic not in seen_topics:
+                    seen_topics.add(topic)
+                    personalized.append(topic)
+                break  # first keyword match per token
+
+    # Fallback: too few signals → use curriculum directly
+    if len(personalized) < 2:
+        return curriculum[:6]
+
+    # Determine which curriculum topics are already covered by personalized ones
+    superseded: set[str] = set()
+    for curr_topic in curriculum:
+        replacement_set = _CURRICULUM_SUPERSEDED_BY.get(curr_topic, set())
+        if replacement_set & seen_topics:
+            superseded.add(curr_topic)
+
+    # Fill remaining slots from curriculum (not superseded, not already added)
+    for curr_topic in curriculum:
+        if len(personalized) >= 7:
+            break
+        if curr_topic not in seen_topics and curr_topic not in superseded:
+            personalized.append(curr_topic)
+            seen_topics.add(curr_topic)
+
+    return personalized[:7]
+
+
+def _mastery_topic_metadata(
+    role: str,
+    analysis,
+    personalized_topics: list[str],
+) -> dict:
+    """
+    Return a metadata dict keyed by topic name explaining the source and
+    resume evidence for each personalised mastery topic.
+    Stored as CandidateState.mastery_topic_metadata.
+    """
+    if not analysis:
+        return {
+            t: {"source": "role_curriculum",
+                "reason": f"Core curriculum topic for {role}.",
+                "skill_evidence": []}
+            for t in personalized_topics
+        }
+
+    curriculum_set = set(_ROLE_CURRICULUM.get(role, []))
+    skills = list(getattr(analysis, "skills", []) or [])
+    projects = list(getattr(analysis, "projects", []) or [])
+    weak_areas = list(getattr(analysis, "weak_areas", []) or [])
+
+    # Build reverse map: topic → matching skill/tech names
+    topic_to_evidence: dict[str, list[str]] = {}
+    for s in skills:
+        sl = s.lower()
+        for keyword, topic in _RESUME_TOPIC_MAP.items():
+            if _keyword_matches(keyword, sl):
+                topic_to_evidence.setdefault(topic, []).append(s)
+                break
+    for proj in projects[:3]:
+        proj_name = getattr(proj, "name", "unknown")
+        for tech in getattr(proj, "technologies", []):
+            tl = tech.lower()
+            for keyword, topic in _RESUME_TOPIC_MAP.items():
+                if _keyword_matches(keyword, tl):
+                    topic_to_evidence.setdefault(topic, []).append(
+                        f"{tech} (project: {proj_name})"
+                    )
+                    break
+
+    metadata: dict = {}
+    for topic in personalized_topics:
+        evidence = topic_to_evidence.get(topic, [])
+
+        # Check if this topic matches a weak area
+        weak_match = next(
+            (wa for wa in weak_areas
+             if wa.lower() in topic.lower() or topic.lower() in wa.lower()),
+            None,
+        )
+
+        if weak_match:
+            source = "resume_weak_area"
+            reason = f"Resume flags '{weak_match}' as a weak area."
+        elif evidence:
+            source = "resume_skill"
+            reason = f"Resume signals ({', '.join(evidence[:2])}) map to '{topic}'."
+        elif topic in curriculum_set:
+            source = "role_curriculum"
+            reason = f"Core curriculum topic for {role} — no direct resume signal."
+        else:
+            source = "role_curriculum"
+            reason = f"Required knowledge area for {role}."
+
+        metadata[topic] = {
+            "source": source,
+            "reason": reason,
+            "skill_evidence": evidence[:3],
+        }
+
+    return metadata
+
+
+# ── Phase 6: LLM-based generic mastery topic synthesis ───────────────────────
+
+def _similar_topic(a: str, b: str) -> bool:
+    """True when two normalised topic names share ≥60 % of their words (Jaccard)."""
+    aw = set(a.lower().split())
+    bw = set(b.lower().split())
+    if not aw or not bw:
+        return False
+    return len(aw & bw) / max(len(aw), len(bw)) >= 0.60
+
+
+def _mastery_from_llm_confidence(
+    topic: str,
+    source: str,
+    initial_confidence: float,
+    level: str,
+) -> int:
+    """Convert LLM initial_confidence (0.0–1.0) to a mastery score (10–95)."""
+    level_offset = {"senior": 6, "mid": 0, "junior": -6}.get(level, 0)
+    jitter = _topic_jitter(topic, -4, 5)
+    # weak_area: cap at 50 regardless of stated confidence
+    if source == "weak_area":
+        base = round(min(50.0, initial_confidence * 100))
+    else:
+        base = round(initial_confidence * 100)
+    return max(10, min(95, base + level_offset + jitter))
+
+
+_VALID_SOURCES = {"resume_skill", "resume_project", "weak_area", "role_expectation"}
+
+
+def _validate_and_sanitize_llm_topics(
+    raw_topics: list,
+    role: str,
+    analysis,
+    level: str,
+) -> list[dict]:
+    """
+    Clean, deduplicate, and bound LLM-generated topic list.
+
+    - Strips bad/short/missing names
+    - Deduplicates via word-overlap similarity
+    - Trims to max 7
+    - Fills to min 5 from deterministic fallback if needed
+    - Marks fallback entries with _fallback=True
+    """
+    valid: list[dict] = []
+    seen_lower: list[str] = []   # ordered so near-dedup stays predictable
+
+    for item in raw_topics:
+        if not isinstance(item, dict):
+            continue
+        topic_name = str(item.get("topic", "")).strip()
+        if len(topic_name) < 3 or len(topic_name) > 80:
+            continue
+
+        topic_lower = topic_name.lower()
+        # Exact dedup
+        if topic_lower in seen_lower:
+            continue
+        # Near-dedup: skip if too similar to an already-accepted topic
+        if any(_similar_topic(topic_lower, s) for s in seen_lower):
+            continue
+        seen_lower.append(topic_lower)
+
+        # Sanitise fields
+        source = str(item.get("source", "role_expectation"))
+        if source not in _VALID_SOURCES:
+            source = "role_expectation"
+
+        evidence = item.get("evidence", [])
+        evidence = [str(e) for e in (evidence if isinstance(evidence, list) else [])][:5]
+
+        reason = str(item.get("reason", ""))[:200]
+
+        conf = item.get("initial_confidence")
+        try:
+            conf = max(0.0, min(1.0, float(conf)))
+        except (TypeError, ValueError):
+            conf = 0.50
+
+        angles = item.get("question_angles", [])
+        angles = [str(a) for a in (angles if isinstance(angles, list) else [])][:4]
+
+        valid.append({
+            "topic":               topic_name,
+            "source":              source,
+            "evidence":            evidence,
+            "reason":              reason,
+            "initial_confidence":  conf,
+            "question_angles":     angles,
+        })
+
+    # Trim to max 7
+    valid = valid[:7]
+
+    # Fill to min 5 from deterministic fallback
+    if len(valid) < 5:
+        existing_lower = {t["topic"].lower() for t in valid}
+        for fallback_topic in _resume_aware_curriculum(role, analysis):
+            if len(valid) >= 5:
+                break
+            if fallback_topic.lower() not in existing_lower and not any(
+                _similar_topic(fallback_topic.lower(), e) for e in existing_lower
+            ):
+                existing_lower.add(fallback_topic.lower())
+                valid.append({
+                    "topic":               fallback_topic,
+                    "source":              "role_expectation",
+                    "evidence":            [],
+                    "reason":              f"Core curriculum topic for {role}.",
+                    "initial_confidence":  0.50,
+                    "question_angles":     [],
+                    "_fallback":           True,
+                })
+
+    return valid
+
+
+async def synthesize_mastery_topics_with_llm(
+    role: str,
+    analysis,
+) -> list[dict] | None:
+    """
+    Phase 6: Ask the LLM to synthesise 5–7 mastery topics tailored to this
+    candidate's resume and target role.
+
+    Returns a validated list[dict] or None when:
+      - LLM is disabled / unconfigured
+      - LLM call fails
+      - Response cannot be parsed or has < 2 usable topics
+
+    Callers must always handle None and fall back to _resume_aware_curriculum().
+    """
+    try:
+        from config import get_settings
+        settings = get_settings()
+        if not settings.has_llm_configured:
+            return None
+
+        from services.llm_client import call_llm, extract_json
+
+        level = _infer_level(analysis)
+        skills = list(getattr(analysis, "skills", []) or [])[:20]
+        projects = list(getattr(analysis, "projects", []) or [])[:3]
+        weak_areas = list(getattr(analysis, "weak_areas", []) or [])[:5]
+        domains = list(getattr(analysis, "domains", []) or [])[:3]
+
+        # Build project summary for the prompt
+        proj_summaries = []
+        for p in projects:
+            name = getattr(p, "name", "unnamed")
+            techs = ", ".join(getattr(p, "technologies", [])[:5])
+            proj_summaries.append(f"'{name}' ({techs})")
+
+        skills_str = ", ".join(skills) or "not specified"
+        projs_str  = "; ".join(proj_summaries) or "none"
+        weak_str   = ", ".join(weak_areas) or "none"
+        dom_str    = ", ".join(domains) or "not specified"
+
+        prompt = (
+            f"You are an expert technical interviewer. "
+            f"For a {level}-level candidate applying for '{role}', "
+            f"synthesise 5–7 interview mastery topics grounded in their resume.\n\n"
+            f"Resume signals:\n"
+            f"  Skills:      {skills_str}\n"
+            f"  Projects:    {projs_str}\n"
+            f"  Weak areas:  {weak_str}\n"
+            f"  Domains:     {dom_str}\n\n"
+            f"Return ONLY valid JSON — no markdown, no prose:\n"
+            f'{{\n'
+            f'  "topics": [\n'
+            f'    {{\n'
+            f'      "topic": "Topic Name",\n'
+            f'      "source": "resume_skill|resume_project|weak_area|role_expectation",\n'
+            f'      "evidence": ["skill1", "tech2"],\n'
+            f'      "reason": "One sentence why this topic matters.",\n'
+            f'      "initial_confidence": 0.65,\n'
+            f'      "question_angles": ["architecture", "debugging"]\n'
+            f'    }}\n'
+            f'  ]\n'
+            f'}}\n\n'
+            f"Rules:\n"
+            f"- Exactly 5–7 topics; at least 3 must be technical concept topics.\n"
+            f"- initial_confidence: 0.0–1.0 (≥0.6 = strong resume signal, <0.4 = gap).\n"
+            f"- source weak_area only for explicit gaps mentioned; cap confidence at 0.4.\n"
+            f"- Merge near-duplicate topics; avoid generic 'Programming' or 'Communication'.\n"
+            f"- Ground each topic in resume evidence or standard {role} expectations.\n"
+            f"- Do not invent technologies absent from resume unless standard for {role}.\n"
+        )
+
+        raw = await call_llm(prompt, max_tokens=1200)
+        if raw is None:
+            return None
+
+        data = extract_json(raw)
+        if not data or "topics" not in data:
+            logger.warning(
+                "Phase 6 LLM mastery synthesis: could not parse 'topics' key "
+                "(len=%d, tail=%s); using deterministic fallback.",
+                len(raw), raw[-100:],
+            )
+            return None
+
+        raw_topics = data["topics"]
+        if not isinstance(raw_topics, list) or len(raw_topics) < 2:
+            logger.warning(
+                "Phase 6 LLM mastery synthesis: too few topics (%d); "
+                "using deterministic fallback.",
+                len(raw_topics) if isinstance(raw_topics, list) else 0,
+            )
+            return None
+
+        validated = _validate_and_sanitize_llm_topics(raw_topics, role, analysis, level)
+        if len(validated) < 2:
+            return None
+
+        logger.info(
+            "Phase 6: LLM synthesised %d mastery topics for role='%s' level='%s'.",
+            len(validated), role, level,
+        )
+        return validated
+
+    except Exception as exc:
+        logger.warning(
+            "Phase 6 LLM mastery synthesis failed (non-fatal): %s: %s",
+            type(exc).__name__, exc,
+        )
+        return None
+
+
+def _evidence_based_mastery(
+    topic: str,
+    source: str,
+    evidence_count: int,
+    level: str,
+    current_score: int,
+) -> int:
+    """
+    Phase 2.5: Adjust initial mastery for a personalised topic using its
+    resume-evidence metadata.  Applied AFTER _initial_mastery_for_topic so
+    personalized topics that aren't in _SKILL_TOPIC_MAP get a fair starting
+    score instead of the default-unknown prior of ~47.
+
+    Targets (before level offset + jitter):
+      resume_skill, ≥2 evidence items → base 63  (clear resume support)
+      resume_skill, 1 evidence item   → base 58  (single-skill signal)
+      resume_weak_area                → base 38  (explicit gap; only lowers)
+      role_curriculum                 → no change
+
+    Adjustment is one-directional:
+      resume_skill     → only raises current_score
+      resume_weak_area → only lowers current_score
+    """
+    level_offset = {"senior": 6, "mid": 0, "junior": -6}.get(level, 0)
+    jitter = _topic_jitter(topic, -4, 5)
+
+    if source == "resume_weak_area":
+        target = max(10, min(95, 38 + level_offset + jitter))
+        return min(current_score, target)
+
+    if source == "resume_skill":
+        target_base = 63 if evidence_count >= 2 else 58
+        target = max(10, min(95, target_base + level_offset + jitter))
+        return max(current_score, target)
+
+    return current_score
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _topic_jitter(topic: str, low: int, high: int) -> int:
@@ -153,14 +830,19 @@ def _initial_mastery_for_topic(topic: str, strong_skills: list[str],
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def build_interview_plan(resume_analysis, selected_role: str) -> list[InterviewPlanItem]:
+def build_interview_plan(
+    resume_analysis,
+    selected_role: str,
+    llm_topics: list[dict] | None = None,
+) -> list[InterviewPlanItem]:
     """
     Create a personalised 5-step interview plan from resume analysis and target role.
 
     Strategy:
     1. Always open with "Project Deep Dive" if projects exist.
     2. Include weak areas from the resume as explicit mid-session probe topics.
-    3. Fill remaining steps from the role curriculum (ordered).
+    3. Fill remaining steps from LLM-synthesised topics (Phase 6) when available,
+       else from _resume_aware_curriculum() (Phase 2 deterministic fallback).
     4. Assign opening difficulty = easy; escalate as plan progresses.
     5. Attach real resume evidence to every step.
     """
@@ -204,6 +886,7 @@ def build_interview_plan(resume_analysis, selected_role: str) -> list[InterviewP
                 f"Technologies used: {techs}",
             ],
             "target_skill": "Technical Communication",
+            "question_type": "project_deep_dive",
         })
 
     # Step 2 — Probe a weak area from resume (if any and not already in plan)
@@ -225,12 +908,20 @@ def build_interview_plan(resume_analysis, selected_role: str) -> list[InterviewP
                 ),
                 "evidence": [f"Resume weak area: {wa}"],
                 "target_skill": wa,
+                "question_type": "technical_concept",
             })
             weak_topics_added += 1
 
-    # Step 3 — Fill from curriculum (skip already-added topics)
+    # Step 3 — Fill from personalised curriculum (Phase 6: LLM topics take priority)
+    if llm_topics:
+        _personalized_topics = [
+            t["topic"] for t in llm_topics
+            if t.get("topic") and t["topic"] != "Project Deep Dive"
+        ]
+    else:
+        _personalized_topics = _resume_aware_curriculum(selected_role, resume_analysis)
     diff_sequence = ["easy", "medium", "medium", "hard", "hard"]
-    for topic in curriculum:
+    for topic in _personalized_topics:
         if len(plan_topics) >= 5:
             break
         if any(p["topic"] == topic for p in plan_topics):
@@ -263,6 +954,7 @@ def build_interview_plan(resume_analysis, selected_role: str) -> list[InterviewP
             ),
             "evidence": evidence[:3],
             "target_skill": topic,
+            "question_type": "technical_concept",
         })
 
     # Ensure we have at least 3 items
@@ -274,6 +966,7 @@ def build_interview_plan(resume_analysis, selected_role: str) -> list[InterviewP
             "reason": f"Core coverage area for {selected_role}.",
             "evidence": [f"Required for {selected_role}"],
             "target_skill": fallback,
+            "question_type": "technical_concept",
         })
 
     return [
@@ -284,6 +977,7 @@ def build_interview_plan(resume_analysis, selected_role: str) -> list[InterviewP
             reason=p["reason"],
             linked_resume_evidence=p["evidence"],
             target_skill=p["target_skill"],
+            question_type=p.get("question_type", "technical_concept"),
         )
         for i, p in enumerate(plan_topics[:5])
     ]
@@ -295,10 +989,15 @@ def initialize_candidate_state(
     selected_role: str,
     resume_analysis,
     interview_plan: list[InterviewPlanItem],
+    llm_topics: list[dict] | None = None,
 ) -> CandidateState:
     """
     Initialise a live candidate model from the resume before any questions are asked.
-    Skill mastery is estimated from resume evidence, not observed performance.
+    Skill mastery is estimated from resume evidence (Phase 2.5) or LLM confidence (Phase 6).
+
+    Phase 6: when llm_topics is provided the mastery estimates and metadata are
+    built from LLM-synthesised data; deterministic fallback remains for all
+    topics not covered by the LLM list.
     """
     level = _infer_level(resume_analysis)
 
@@ -325,13 +1024,70 @@ def initialize_candidate_state(
             item.topic, strong_skills, weak_skills, level, all_skills=skills
         )
 
-    # Also initialise for any curriculum topic not in the plan
-    curriculum = _ROLE_CURRICULUM.get(selected_role, [])
-    for topic in curriculum:
-        if topic not in skill_mastery:
-            skill_mastery[topic] = _initial_mastery_for_topic(
-                topic, strong_skills, weak_skills, level, all_skills=skills
-            )
+    if llm_topics:
+        # Phase 6: LLM-synthesised topics — mastery from LLM confidence values
+        for t in llm_topics:
+            topic_name = t.get("topic", "")
+            if topic_name and topic_name not in skill_mastery:
+                skill_mastery[topic_name] = _mastery_from_llm_confidence(
+                    topic_name,
+                    t.get("source", "role_expectation"),
+                    t.get("initial_confidence", 0.50),
+                    level,
+                )
+        # Build LLM-enriched metadata
+        topic_meta: dict[str, Any] = {}
+        for t in llm_topics:
+            topic_name = t.get("topic", "")
+            if not topic_name:
+                continue
+            is_fallback = t.get("_fallback", False)
+            topic_meta[topic_name] = {
+                "source": t.get("source", "role_expectation"),
+                "reason": t.get("reason", ""),
+                "skill_evidence": t.get("evidence", []),
+                "generation_mode": "deterministic_fallback" if is_fallback else "llm",
+                "initial_confidence": t.get("initial_confidence", 0.50),
+                "question_angles": t.get("question_angles", []),
+            }
+        # Fill metadata for plan/curriculum topics not covered by LLM list
+        extra_personalized = [k for k in skill_mastery if k not in topic_meta]
+        det_meta = _mastery_topic_metadata(selected_role, resume_analysis, extra_personalized)
+        for k, v in det_meta.items():
+            if k not in topic_meta:
+                topic_meta[k] = {**v, "generation_mode": "deterministic_fallback"}
+    else:
+        # Phase 2: deterministic fallback (unchanged behavior)
+        _personalized = _resume_aware_curriculum(selected_role, resume_analysis)
+        for topic in _personalized:
+            if topic not in skill_mastery:
+                skill_mastery[topic] = _initial_mastery_for_topic(
+                    topic, strong_skills, weak_skills, level, all_skills=skills
+                )
+
+        # Also initialise any curriculum topic not yet covered
+        curriculum = _ROLE_CURRICULUM.get(selected_role, [])
+        for topic in curriculum:
+            if topic not in skill_mastery:
+                skill_mastery[topic] = _initial_mastery_for_topic(
+                    topic, strong_skills, weak_skills, level, all_skills=skills
+                )
+
+        topic_meta = _mastery_topic_metadata(selected_role, resume_analysis, _personalized)
+
+        # Phase 2.5: Evidence-aware initial mastery boost for personalised topics
+        for topic, meta in topic_meta.items():
+            if topic in skill_mastery:
+                skill_mastery[topic] = _evidence_based_mastery(
+                    topic=topic,
+                    source=meta.get("source", "role_curriculum"),
+                    evidence_count=len(meta.get("skill_evidence", [])),
+                    level=level,
+                    current_score=skill_mastery[topic],
+                )
+        # Add generation_mode tag to deterministic metadata
+        for meta in topic_meta.values():
+            meta.setdefault("generation_mode", "deterministic_fallback")
 
     next_action = interview_plan[0].topic if interview_plan else "Project Deep Dive"
 
@@ -353,7 +1109,24 @@ def initialize_candidate_state(
         risk_flags=[],
         last_decision="session_start",
         next_best_action=next_action,
+        mastery_topic_metadata=topic_meta,
     )
+
+
+# ── Phase 4: Observation weight by question type ──────────────────────────────
+# Controls how much a single answer shifts the Bayesian mastery estimate.
+# behavioral / behavioral_probe: 0.00 — never update technical mastery.
+_OBS_WEIGHT_BY_QTYPE: dict[str, float] = {
+    "technical_concept":   0.45,
+    "technical_follow_up": 0.40,
+    "claim_verification":  0.30,
+    "verify_resume_claim": 0.30,
+    "project_deep_dive":   0.35,
+    "final_synthesis":     0.45,
+    "follow_up":           0.40,
+    "behavioral":          0.00,
+    "behavioral_probe":    0.00,
+}
 
 
 def update_candidate_state(
@@ -361,6 +1134,7 @@ def update_candidate_state(
     answer_record: dict,
     audio_score: Optional[dict] = None,
     video_score: Optional[dict] = None,
+    question_type: Optional[str] = None,
 ) -> CandidateState:
     """
     Update the candidate's live model after a single answer.
@@ -389,19 +1163,46 @@ def update_candidate_state(
 
     # ── Update skill mastery ──────────────────────────────────────────────────
     # Bayesian-style update: blend prior with observed score.
-    # Weight adjusts based on answer count to trust observed evidence more over time:
-    #   Q1 answer: 60% prior / 40% observed
-    #   Q3+ answer: 50% prior / 50% observed
-    obs_weight = 0.45 if state.answers_answered >= 3 else 0.40
+    # Phase 4: obs_weight is question-type-aware; behavioral answers carry no
+    # technical mastery signal (obs_weight == 0.0 → skip update entirely).
+    if question_type and question_type in _OBS_WEIGHT_BY_QTYPE:
+        obs_weight = _OBS_WEIGHT_BY_QTYPE[question_type]
+    else:
+        # Legacy default: trust observed evidence more as interview progresses
+        obs_weight = 0.45 if state.answers_answered >= 3 else 0.40
     prior_weight = 1.0 - obs_weight
+    is_behavioral = obs_weight == 0.0
 
-    if topic and topic in state.skill_mastery:
+    if not is_behavioral and topic and topic in state.skill_mastery:
         prior = state.skill_mastery[topic]
-        updated = round(prior * prior_weight + tech_score * obs_weight)
-        state.skill_mastery[topic] = max(5, min(100, updated))
+        updated = max(5, min(100, round(prior * prior_weight + tech_score * obs_weight)))
+        state.skill_mastery[topic] = updated
+        state.last_mastery_update = {
+            "topic": topic,
+            "question_type": question_type or "unknown",
+            "previous_mastery": prior,
+            "new_mastery": updated,
+            "score_used": tech_score,
+            "reason": (
+                f"{question_type or 'default'} obs_weight={obs_weight}: "
+                f"prior {prior} → {updated}"
+            ),
+            "covered_concepts": evaluation.get("covered_points", []),
+            "missing_concepts": evaluation.get("missing_points", []),
+        }
+    elif is_behavioral:
+        state.last_mastery_update = {
+            "topic": topic or "behavioral",
+            "question_type": question_type or "behavioral",
+            "previous_mastery": state.skill_mastery.get(topic, 0) if topic else 0,
+            "new_mastery": state.skill_mastery.get(topic, 0) if topic else 0,
+            "score_used": tech_score,
+            "reason": "behavioral answer — technical mastery not updated",
+            "covered_concepts": [],
+            "missing_concepts": [],
+        }
 
-    # Also update adjacent topics that are closely linked to the answered topic
-    # (e.g. a strong Database answer also signals SQL/query knowledge)
+    # Adjacent topic propagation — skip for behavioral (no mastery signal)
     _ADJACENT_TOPICS: dict[str, list[str]] = {
         "Database Design":      ["Database", "Performance"],
         "REST Fundamentals":    ["API Design", "Authentication"],
@@ -412,12 +1213,13 @@ def update_candidate_state(
         "Deep Learning":        ["Transfer Learning", "MLOps"],
         "Pipeline Design":      ["Processing Paradigms", "Data Quality"],
     }
-    for adj in _ADJACENT_TOPICS.get(topic, []):
-        if adj in state.skill_mastery:
-            adj_prior = state.skill_mastery[adj]
-            # Weak signal from adjacency: 85% prior / 15% observed
-            adj_updated = round(adj_prior * 0.85 + tech_score * 0.15)
-            state.skill_mastery[adj] = max(5, min(100, adj_updated))
+    if not is_behavioral:
+        for adj in _ADJACENT_TOPICS.get(topic, []):
+            if adj in state.skill_mastery:
+                adj_prior = state.skill_mastery[adj]
+                # Weak signal from adjacency: 85% prior / 15% observed
+                adj_updated = round(adj_prior * 0.85 + tech_score * 0.15)
+                state.skill_mastery[adj] = max(5, min(100, adj_updated))
 
     # ── Confidence trend ──────────────────────────────────────────────────────
     # Collect all tech scores observed so far from risk flags analysis
@@ -500,10 +1302,18 @@ def update_candidate_state(
     state.risk_flags = flags[-6:]  # keep latest 6
 
     # ── Next best action ──────────────────────────────────────────────────────
-    # Find the weakest topic with highest curriculum importance
+    # Phase 4: After a project_deep_dive, prefer the weakest concept topic to
+    # avoid looping on the same project area (respects implicit project quota).
     if state.skill_mastery:
-        weakest = min(state.skill_mastery, key=lambda t: state.skill_mastery[t])
-        state.next_best_action = weakest
+        if question_type == "project_deep_dive" and topic:
+            # Shift focus away from the just-probed project topic
+            other_topics = {t for t in state.skill_mastery if t != topic}
+            if other_topics:
+                state.next_best_action = min(other_topics, key=lambda t: state.skill_mastery[t])
+            else:
+                state.next_best_action = min(state.skill_mastery, key=lambda t: state.skill_mastery[t])
+        else:
+            state.next_best_action = min(state.skill_mastery, key=lambda t: state.skill_mastery[t])
 
     state.last_decision = "post_answer_update"
     return state
@@ -515,6 +1325,7 @@ def update_candidate_state_for_improvement(
     previous_evaluation: dict,
     audio_score: Optional[dict] = None,
     video_score: Optional[dict] = None,
+    question_type: Optional[str] = None,
 ) -> CandidateState:
     """
     Update candidate state after /improve-answer — NOT a new unique question.
@@ -547,15 +1358,20 @@ def update_candidate_state_for_improvement(
     # (no change to state.answers_answered)
 
     # ── Update skill mastery with improved score ──────────────────────────────
-    obs_weight = 0.45 if state.answers_answered >= 3 else 0.40
+    # Phase 4: respect question-type-aware obs_weight; skip if behavioral
+    if question_type and question_type in _OBS_WEIGHT_BY_QTYPE:
+        obs_weight = _OBS_WEIGHT_BY_QTYPE[question_type]
+    else:
+        obs_weight = 0.45 if state.answers_answered >= 3 else 0.40
     prior_weight = 1.0 - obs_weight
+    is_behavioral = obs_weight == 0.0
 
-    if topic and topic in state.skill_mastery:
+    if not is_behavioral and topic and topic in state.skill_mastery:
         prior = state.skill_mastery[topic]
         updated = round(prior * prior_weight + tech_score * obs_weight)
         state.skill_mastery[topic] = max(5, min(100, updated))
 
-    # Adjacent topic propagation (same as normal update)
+    # Adjacent topic propagation (same as normal update; skip for behavioral)
     _ADJACENT_TOPICS: dict[str, list[str]] = {
         "Database Design":      ["Database", "Performance"],
         "REST Fundamentals":    ["API Design", "Authentication"],
@@ -566,11 +1382,12 @@ def update_candidate_state_for_improvement(
         "Deep Learning":        ["Transfer Learning", "MLOps"],
         "Pipeline Design":      ["Processing Paradigms", "Data Quality"],
     }
-    for adj in _ADJACENT_TOPICS.get(topic, []):
-        if adj in state.skill_mastery:
-            adj_prior = state.skill_mastery[adj]
-            adj_updated = round(adj_prior * 0.85 + tech_score * 0.15)
-            state.skill_mastery[adj] = max(5, min(100, adj_updated))
+    if not is_behavioral:
+        for adj in _ADJACENT_TOPICS.get(topic, []):
+            if adj in state.skill_mastery:
+                adj_prior = state.skill_mastery[adj]
+                adj_updated = round(adj_prior * 0.85 + tech_score * 0.15)
+                state.skill_mastery[adj] = max(5, min(100, adj_updated))
 
     # ── Confidence trend ──────────────────────────────────────────────────────
     word_count = len(answer_text.split())
@@ -1199,8 +2016,15 @@ def make_next_question_decision(
                 "Switching to a more accessible question with positive framing."
             )
 
-    # TODO(behavioral_probe): inject a behavioral question when len(session_history) >= 2
-    # and no behavioral topic has been covered — defer to orchestrator fallback for now.
+    # ── Question mix budget: cap project/verify_resume_claim at quota ────────────
+    if decision_type == "verify_resume_claim":
+        _project_count = count_question_categories(session_history).get("project", 0)
+        if _project_count >= 2:
+            decision_type = "deeper_follow_up"
+            detected_issue = (
+                f"Project question quota reached ({_project_count}/2). "
+                f"Routing to a technical concept follow-up on '{current_topic}' instead."
+            )
 
     # ── Agentic topic + difficulty selection ───────────────────────────────────
     next_topic = current_topic

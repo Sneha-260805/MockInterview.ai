@@ -97,6 +97,51 @@ def _answer_contains(answer_lower: str, concept: str) -> bool:
     return False
 
 
+# ── Phase 3: Rubric profile weights (sum = 100 per profile) ──────────────────
+# Each profile redistributes the 5 raw dimension scores by these weights.
+# Dimension scores are first normalised to 0-100, then scaled by weight.
+
+_PROFILE_WEIGHTS: Dict[str, Dict[str, int]] = {
+    "technical_concept": {
+        # Pure concept questions — project connection irrelevant
+        "conceptual": 35, "practical": 30, "tradeoffs": 20,
+        "communication": 15, "project": 0, "directness": 0,
+    },
+    "project_deep_dive": {
+        # Ownership + implementation matter most
+        "conceptual": 20, "practical": 25, "tradeoffs": 20,
+        "communication": 10, "project": 25, "directness": 0,
+    },
+    "technical_follow_up": {
+        # Phase 3.1: Technical depth and precision only — NO project ownership required.
+        # Normal follow-ups (Redis invalidation, RAG chunking, JWT expiry, SQL debugging)
+        # must not be penalised for missing first-person project language.
+        "conceptual": 15, "practical": 30, "tradeoffs": 30,
+        "communication": 10, "project": 0, "directness": 15,
+    },
+    "claim_verification": {
+        # Phase 3.1: Resume/project ownership checks — rewards first-person detail,
+        # ownership language, and concrete implementation specifics.
+        "conceptual": 10, "practical": 25, "tradeoffs": 20,
+        "communication": 5, "project": 20, "directness": 20,
+    },
+    # "behavioral" uses entirely different dimensions — handled in _score_behavioral_profile()
+}
+
+# Maps question_type field values to rubric profile names.
+# Phase 3.1: claim_verification and verify_resume_claim use the stricter
+# claim_verification profile (ownership-aware), NOT technical_follow_up.
+_QUESTION_TYPE_TO_PROFILE: Dict[str, str] = {
+    "technical_concept":   "technical_concept",
+    "project_deep_dive":   "project_deep_dive",
+    "technical_follow_up": "technical_follow_up",
+    "claim_verification":  "claim_verification",   # was "technical_follow_up" in Phase 3
+    "behavioral":          "behavioral",
+    "behavioral_probe":    "behavioral",
+    "verify_resume_claim": "claim_verification",   # was "technical_follow_up" in Phase 3
+    "final_synthesis":     "technical_concept",
+}
+
 # ── Rubric definitions ────────────────────────────────────────────────────────
 # Each rubric has 4 concept lists, one per scorable dimension.
 # communication_structure is scored separately from text signals.
@@ -531,6 +576,198 @@ def _score_project_connection(answer: str) -> Tuple[int, List[str]]:
     return score, matched
 
 
+# ── Phase 3.1: Follow-up directness scoring ──────────────────────────────────
+
+def _score_followup_directness(answer: str) -> Tuple[int, List[str]]:
+    """
+    Phase 3.1: Score directness and technical precision for follow-up answers (0-100).
+
+    Rewards answers that:
+      • Start with a clear, specific claim ("The reason is...", "Specifically...")
+      • Explain the underlying mechanism ("works by", "because", "under the hood")
+      • Use concrete technical values or domain-specific terms (TTL, chunk size, 15 ms)
+      • Frame a trade-off or comparison specific to the follow-up question
+
+    No floor — a vague answer contributes 0 to this dimension.
+    """
+    al = answer.lower()
+    checks = [
+        # Direct answer markers
+        (r"\b(the reason (is|why|for)|specifically[,\s]|the (key|main|core) (point|difference"
+         r"|reason|issue)|in short|to (answer|clarify)|that means|the answer is)\b",
+         "direct assertion"),
+        # Mechanism / how-it-works explanation
+        (r"\b(works by|because|under the hood|internally|the mechanism|this (happens|occurs) when"
+         r"|the way (it|this|that) works|how (it|this) works)\b",
+         "mechanism explanation"),
+        # Concrete technical values or domain-specific terms
+        (r"\b(ttl|timeout|expiry|threshold|chunk( size)?|shard|replica|partition|cursor"
+         r"|retry|circuit.?breaker|backoff|batch( size)?|page( size)?|buffer|embedding|vector"
+         r"|token (limit|budget)|overlap)\b"
+         r"|\b\d+\s*(ms|seconds?|minutes?|kb|mb|gb|tokens?|chunks?|records?|requests?|%)\b",
+         "concrete technical detail"),
+        # Comparative / trade-off framing specific to the follow-up
+        (r"\b(trade.?off|compared to|whereas|unlike|in contrast|the difference (is|between)"
+         r"|on the other hand)\b|\bvs\b",
+         "comparative framing"),
+    ]
+    signals = [label for pattern, label in checks if re.search(pattern, al)]
+    return round(len(signals) / len(checks) * 100), signals
+
+
+# ── Phase 3: Behavioral scoring helpers ──────────────────────────────────────
+
+def _score_behavioral_situation_task(answer: str) -> Tuple[int, List[str]]:
+    """STAR: Situation / Task — clarity of context (20 pts max)."""
+    al = answer.lower()
+    checks = [
+        (r"\b(when|the situation|at the time|the problem was|context|background)\b", "context setting"),
+        (r"\b(i was (asked|tasked|responsible for|working on)|my (task|goal|objective|role) was)\b",
+         "task clarity"),
+        (r"\b(the (team|project|company|client) (needed|wanted|was|had|faced))\b", "team context"),
+        (r"\b(in order to|the challenge was|we were (trying|working|facing)|the goal)\b",
+         "challenge framing"),
+    ]
+    signals = [label for pattern, label in checks if re.search(pattern, al)]
+    return min(round(len(signals) / len(checks) * 20), 20), signals
+
+
+def _score_behavioral_action_ownership(answer: str) -> Tuple[int, List[str]]:
+    """STAR: Action / Ownership — first-person initiative (30 pts max)."""
+    al = answer.lower()
+    checks = [
+        (r"\b(i decided|i chose|i led|i took|i was responsible|i owned|my decision)\b",
+         "decision ownership"),
+        (r"\b(i (implemented|built|designed|created|wrote|fixed|solved|initiated|started))\b",
+         "implementation action"),
+        # "coordinating with" is a natural form of "I coordinated" mid-sentence
+        (r"\b(i (coordinated|managed|communicated|collaborated|worked with|partnered))"
+         r"|(coordinating with|managing the)\b",
+         "coordination action"),
+        # Accept both "I proposed" and compound form "... and proposed" with prior "I"
+        (r"\b(i (proposed|suggested|recommended|pushed for|advocated|raised))\b"
+         r"|\band proposed\b|\band suggested\b",
+         "initiative"),
+        (r"\b(i (prioritised|prioritized|focused|identified|analysed|analyzed|evaluated))\b",
+         "analysis action"),
+    ]
+    signals = [label for pattern, label in checks if re.search(pattern, al)]
+    return min(round(len(signals) / len(checks) * 30), 30), signals
+
+
+def _score_behavioral_result_impact(answer: str) -> Tuple[int, List[str]]:
+    """STAR: Result / Impact — quantified or qualitative outcome (20 pts max)."""
+    al = answer.lower()
+    checks = [
+        (r"\b(as a result|the outcome was|this led to|which meant|consequently)\b", "outcome stated"),
+        (r"\b\d+\s*%|\b\d+x\b|\b\d+\s*(seconds?|minutes?|hours?|days?|weeks?)\b", "quantified impact"),
+        (r"\b(improved|reduced|increased|saved|delivered|shipped|launched|achieved)\b", "achievement verb"),
+        (r"\b(the team|stakeholders|users|customers|clients) (was|were|could|got|received|saw)\b",
+         "stakeholder impact"),
+    ]
+    signals = [label for pattern, label in checks if re.search(pattern, al)]
+    return min(round(len(signals) / len(checks) * 20), 20), signals
+
+
+def _score_behavioral_reflection(answer: str) -> Tuple[int, List[str]]:
+    """STAR: Reflection / Learning — retrospective insight (15 pts max)."""
+    al = answer.lower()
+    checks = [
+        (r"\b(i (learned|learnt)|key (takeaway|lesson|insight)|in retrospect)\b", "explicit learning"),
+        # Catch "I would have done", "I would do differently", "if I did it again"
+        (r"\b(i would (have|do|change)|what i would (do|change)|if i did it again"
+         r"|do it differently|next time i)\b", "retrospective"),
+        (r"\b(this (taught|showed|reminded) me|it made me (realise|realize|understand)"
+         r"|i (realised|realized))\b", "insight"),
+    ]
+    signals = [label for pattern, label in checks if re.search(pattern, al)]
+    return min(round(len(signals) / len(checks) * 15), 15), signals
+
+
+def _score_behavioral_profile(answer: str, topic: str) -> Dict:
+    """Score a behavioral answer using the STAR-method rubric (total 100 pts)."""
+    if not answer.strip():
+        return {
+            "rubric_scores": {
+                "situation_task_clarity": 0, "action_ownership": 0,
+                "result_impact": 0, "reflection_learning": 0, "communication_structure": 0,
+            },
+            "rubric_total": 0,
+            "evidence": [],
+            "rubric_profile": "behavioral",
+            "improvement_hint": (
+                "Use the STAR method: describe the Situation, your Task, "
+                "the Actions you took, and the Results achieved."
+            ),
+            "interviewer_diagnosis": f"No answer was provided for '{topic}'.",
+        }
+
+    sit_score,  sit_sigs  = _score_behavioral_situation_task(answer)
+    act_score,  act_sigs  = _score_behavioral_action_ownership(answer)
+    res_score,  res_sigs  = _score_behavioral_result_impact(answer)
+    ref_score,  ref_sigs  = _score_behavioral_reflection(answer)
+    comm_score, comm_sigs = _score_communication(answer)
+
+    rubric_total = min(sit_score + act_score + res_score + ref_score + comm_score, 100)
+
+    dims = [
+        ("Situation/task clarity", sit_score,  20),
+        ("Action and ownership",   act_score,  30),
+        ("Result and impact",      res_score,  20),
+        ("Reflection and learning", ref_score, 15),
+        ("Communication structure", comm_score, 15),
+    ]
+    worst = min(dims, key=lambda d: d[1] / d[2])
+
+    hint_map = {
+        "Situation/task clarity": (
+            "Open with more context: set the scene (when, what project/team) "
+            "and clarify what specifically you were asked to do."
+        ),
+        "Action and ownership": (
+            "Use first-person language to show what YOU did — 'I decided', 'I led', 'I implemented'. "
+            "Avoid 'we' without specifying your personal contribution."
+        ),
+        "Result and impact": (
+            "Close with the outcome: what specifically changed, "
+            "and ideally quantify it (e.g. reduced errors by 30%, shipped on time)."
+        ),
+        "Reflection and learning": (
+            "Add a brief reflection: what you learned, what you'd do differently, "
+            "or what insight the experience gave you."
+        ),
+        "Communication structure": (
+            "Structure your answer: set context → describe actions → state result → reflect. "
+            "Transition words like 'as a result' or 'in retrospect' help."
+        ),
+    }
+    improvement_hint = hint_map.get(
+        worst[0], "Structure your answer using the STAR method for maximum clarity."
+    )
+
+    if rubric_total >= 75:
+        diagnosis = f"Strong behavioral answer on '{topic}' — clear ownership, context, and impact."
+    elif rubric_total >= 55:
+        diagnosis = f"Good behavioral answer on '{topic}'. {worst[0]} could be strengthened."
+    else:
+        diagnosis = f"The answer needs more STAR structure — particularly {worst[0].lower()}."
+
+    return {
+        "rubric_scores": {
+            "situation_task_clarity": sit_score,
+            "action_ownership":       act_score,
+            "result_impact":          res_score,
+            "reflection_learning":    ref_score,
+            "communication_structure": comm_score,
+        },
+        "rubric_total":          rubric_total,
+        "evidence":              (sit_sigs + act_sigs + res_sigs + ref_sigs)[:10],
+        "rubric_profile":        "behavioral",
+        "improvement_hint":      improvement_hint,
+        "interviewer_diagnosis": diagnosis,
+    }
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def score_with_rubric(
@@ -657,4 +894,160 @@ def score_with_rubric(
         "evidence":             all_evidence[:12],  # cap for readability
         "improvement_hint":     improvement_hint,
         "interviewer_diagnosis": diagnosis,
+    }
+
+
+def score_with_rubric_profile(
+    answer: str,
+    topic: str,
+    expected_points: List[str],
+    rubric_profile: str | None = None,
+) -> Dict:
+    """
+    Phase 3: Profile-aware rubric scoring.
+
+    When rubric_profile is None or unrecognised, falls back to score_with_rubric()
+    (fully backward compatible).
+
+    For non-behavioral profiles:
+      Each of the 5 raw dimensions is scored on a normalised 0-100 scale, then
+      scaled by the profile's weight for that dimension.  This means a concept
+      answer is never penalised for missing project-language when the profile
+      weight for that dimension is 0.
+
+    For the behavioral profile, STAR-method scoring is used instead.
+    """
+    if rubric_profile == "behavioral":
+        return _score_behavioral_profile(answer, topic)
+
+    if not rubric_profile or rubric_profile not in _PROFILE_WEIGHTS:
+        return score_with_rubric(answer, topic, expected_points)
+
+    if not answer.strip():
+        empty = score_with_rubric("", topic, expected_points)
+        empty["rubric_profile"] = rubric_profile
+        return empty
+
+    al = _normalise(answer)
+    rubric = _get_rubric(topic)
+    w = _PROFILE_WEIGHTS[rubric_profile]
+
+    # Score each dimension normalised to 0-100 (then scale by weight)
+    conc_norm,  conc_matched  = _score_dimension(al, rubric.get("conceptual", []), 100)
+    prac_norm,  prac_matched  = _score_dimension(al, rubric.get("practical",  []), 100)
+    depth_norm, depth_matched = _score_dimension(al, rubric.get("tradeoffs",  []), 100)
+
+    comm_raw,  comm_signals = _score_communication(answer)       # 0-15
+    comm_norm = round(comm_raw / 15 * 100)
+
+    proj_raw,  proj_signals = _score_project_connection(answer)  # 0-10
+    proj_norm = round(proj_raw / 10 * 100) if proj_raw else 0
+
+    # Phase 3.1: directness dimension (technical_follow_up + claim_verification only)
+    dir_weight = w.get("directness", 0)
+    if dir_weight > 0:
+        dir_norm, dir_signals = _score_followup_directness(answer)
+    else:
+        dir_norm, dir_signals = 0, []
+
+    rubric_total = round(
+        conc_norm  * w["conceptual"]      / 100 +
+        prac_norm  * w["practical"]       / 100 +
+        depth_norm * w["tradeoffs"]       / 100 +
+        comm_norm  * w["communication"]   / 100 +
+        proj_norm  * w["project"]         / 100 +
+        dir_norm   * dir_weight           / 100
+    )
+    rubric_total = min(rubric_total, 100)
+
+    rubric_scores: Dict[str, int] = {
+        "conceptual_correctness":    round(conc_norm  * w["conceptual"]    / 100),
+        "practical_application":     round(prac_norm  * w["practical"]     / 100),
+        "depth_and_tradeoffs":       round(depth_norm * w["tradeoffs"]     / 100),
+        "communication_structure":   round(comm_norm  * w["communication"] / 100),
+        "resume_project_connection": round(proj_norm  * w["project"]       / 100),
+    }
+    if dir_weight > 0:
+        rubric_scores["direct_answer_to_followup"] = round(dir_norm * dir_weight / 100)
+
+    all_evidence = (conc_matched + prac_matched + depth_matched + dir_signals)[:12]
+
+    # Improvement hint — find worst active dimension (by fill ratio)
+    dim_info = [
+        ("Conceptual understanding", w["conceptual"],    conc_norm),
+        ("Practical application",    w["practical"],     prac_norm),
+        ("Trade-off depth",          w["tradeoffs"],     depth_norm),
+        ("Communication structure",  w["communication"], comm_norm),
+    ]
+    if w["project"] > 0:
+        label = "Project ownership" if rubric_profile == "project_deep_dive" else "Ownership detail"
+        dim_info.append((label, w["project"], proj_norm))
+    if dir_weight > 0:
+        dim_info.append(("Answer directness", dir_weight, dir_norm))
+
+    active = [(name, weight, norm) for name, weight, norm in dim_info if weight > 0]
+    worst = min(active, key=lambda d: d[2]) if active else ("Communication structure", 15, 50)
+    worst_name = worst[0]
+
+    hint_map = {
+        "Conceptual understanding": (
+            f"To go deeper on '{topic}': name the key mechanisms, briefly define what they do, "
+            "and explain why they exist — that three-step pattern (name → define → why) "
+            "is what strong answers look like."
+        ),
+        "Practical application": (
+            f"Ground the answer in '{topic}' with a specific tool or step you've used. "
+            "Even one sentence like 'In practice I used X to do Y' makes a big difference."
+        ),
+        "Trade-off depth": (
+            "The answer would be stronger with one explicit trade-off: "
+            "what does this approach give up, and when would you pick an alternative?"
+        ),
+        "Communication structure": (
+            "Try: one sentence of context, one concrete example, one trade-off or caveat. "
+            "Transition words like 'however' or 'specifically' signal structured thinking."
+        ),
+        "Project ownership": (
+            "Describe the project in first person: what YOU decided, built, and owned. "
+            "Include at least one concrete architectural decision and its rationale."
+        ),
+        "Ownership detail": (
+            "Show ownership: what specifically did you build, decide, or observe? "
+            "Starting with 'I implemented', 'I chose', or 'In my team we...' "
+            "makes the answer far more credible for claim verification."
+        ),
+        "Answer directness": (
+            "Start with a direct, specific answer: 'The reason is...', 'Specifically...' "
+            "or name the concrete mechanism at play. "
+            "Concrete values (TTL=30s, chunk size 512 tokens) and "
+            "comparative framing ('compared to X, Y is better when...') signal technical precision."
+        ),
+    }
+    improvement_hint = hint_map.get(
+        worst_name,
+        "Add one concrete example and one trade-off — these two additions raise scores the most."
+    )
+
+    if rubric_total >= 80:
+        diagnosis = f"Strong answer on '{topic}' — conceptual grounding and practical depth are both clearly there."
+    elif rubric_total >= 65:
+        diagnosis = f"Good answer on '{topic}'. Solid foundation; {worst_name.lower()} could go a bit further."
+    elif rubric_total >= 45:
+        diagnosis = (
+            f"Decent start on '{topic}'. The candidate shows awareness of the area, "
+            f"but {worst_name.lower()} would benefit from more specificity."
+        )
+    else:
+        diagnosis = (
+            f"The answer on '{topic}' establishes a starting point, "
+            f"but needs more depth — particularly on {worst_name.lower()}."
+        )
+
+    return {
+        "rubric_scores":          rubric_scores,
+        "rubric_total":           rubric_total,
+        "evidence":               all_evidence,
+        "rubric_profile":         rubric_profile,
+        "improvement_hint":       improvement_hint,
+        "interviewer_diagnosis":  diagnosis,
     }

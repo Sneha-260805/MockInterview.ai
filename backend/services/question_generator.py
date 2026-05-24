@@ -56,6 +56,7 @@ class QuestionDecisionContext:
     engagement_score: Optional[int] = None
     follow_up_intent: str = ""
     stay_on_topic: bool = False
+    question_type_hint: str = ""
 
 
 def _concepts(topic: str, fallback_skill: str = "") -> list[str]:
@@ -119,6 +120,7 @@ def _build_decision_context(
     engagement_score: Optional[int] = None,
     follow_up_intent: str = "",
     stay_on_topic: Optional[bool] = None,
+    question_type_hint: str = "",
 ) -> QuestionDecisionContext:
     missing = missing_concepts or missing_points or []
     covered = covered_concepts or covered_points or []
@@ -143,6 +145,7 @@ def _build_decision_context(
         engagement_score=engagement_score,
         follow_up_intent=intent,
         stay_on_topic=_resolve_stay_on_topic(dtype, stay_on_topic),
+        question_type_hint=question_type_hint or "",
     )
 
 
@@ -232,6 +235,7 @@ def build_llm_prompt(
         f"reason_for_adaptation: {ctx.decision_reason or 'Continue the interview plan.'}\n"
         f"follow_up_intent: {ctx.follow_up_intent or 'Probe role-relevant depth.'}\n"
         f"stay_on_topic: {ctx.stay_on_topic}\n"
+        f"question_type_hint: {ctx.question_type_hint or 'auto'}\n"
         f"{trace_block}"
         f"Generation rule: {decision_rules}\n\n"
         "── Previous turn ──\n"
@@ -315,7 +319,7 @@ def _fallback_question(
     dtype = ctx.decision_type
     why = ctx.decision_reason or "Resume-aware adaptive question."
     followup = ctx.stay_on_topic or dtype == "deeper_follow_up"
-    qtype = "technical"
+    qtype = ctx.question_type_hint or "technical"
 
     if dtype == "behavioral_probe":
         # Pick a project-connected question when resume data is available,
@@ -487,6 +491,7 @@ async def generate_question(
     engagement_score: Optional[int] = None,
     follow_up_intent: str = "",
     stay_on_topic: Optional[bool] = None,
+    question_type_hint: Optional[str] = None,
 ) -> Question:
     ctx = _build_decision_context(
         decision_type=decision_type,
@@ -504,6 +509,7 @@ async def generate_question(
         engagement_score=engagement_score,
         follow_up_intent=follow_up_intent,
         stay_on_topic=stay_on_topic,
+        question_type_hint=question_type_hint or "",
     )
     llm_q = await _llm_question(role, topic, difficulty, analysis, ctx)
     if llm_q:

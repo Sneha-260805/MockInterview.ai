@@ -27,6 +27,10 @@ class InterviewPlanItem(BaseModel):
     reason: str              # why this topic at this step
     linked_resume_evidence: List[str]   # concrete resume items that justify this step
     target_skill: str        # the underlying skill being probed
+    # Phase 1: question mix policy
+    # Values: project_deep_dive | technical_concept | technical_follow_up |
+    #         claim_verification | behavioral | final_synthesis
+    question_type: Optional[str] = None
 
 
 class CandidateState(BaseModel):
@@ -45,6 +49,8 @@ class CandidateState(BaseModel):
     answers_answered: int = Field(default=0)            # total answers processed so far
     concept_gaps: Dict[str, int] = Field(default_factory=dict)   # concept → miss count
     domain_performance: Dict[str, List[int]] = Field(default_factory=dict)  # topic → [scores]
+    mastery_topic_metadata: Dict[str, Any] = Field(default_factory=dict)    # topic → {source, reason, skill_evidence}
+    last_mastery_update: Optional[Dict[str, Any]] = None                    # Phase 4: last mastery change record
 
 
 class AgentDecisionTrace(BaseModel):

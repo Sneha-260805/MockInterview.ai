@@ -38,6 +38,8 @@ class EvaluationResult(BaseModel):
     improvement_hint: Optional[str] = None           # targeted coaching tip
     interviewer_diagnosis: Optional[str] = None      # 1-sentence diagnosis
     evaluation_source: Optional[str] = None          # "llm:gemini" | "rule_based_fallback"
+    # ── Phase 3: Question-type-aware rubric profile (optional — backward compatible)
+    rubric_profile: Optional[str] = None             # technical_concept | project_deep_dive | technical_follow_up | behavioral
 
 
 class AnswerRecord(BaseModel):
@@ -111,7 +113,8 @@ class EvaluateAnswerRequest(BaseModel):
     question: str
     answer: str
     expected_points: List[str]
-    topic: Optional[str] = None   # Phase 11: for rubric selection
+    topic: Optional[str] = None        # Phase 11: for rubric selection
+    question_type: Optional[str] = None  # Phase 3: for rubric profile selection
 
 
 class NextQuestionRequest(BaseModel):

@@ -26,6 +26,20 @@ _FOLLOWUP_DECISION_TYPES = frozenset({
     "claim_verification",
 })
 
+_DECISION_TO_QTYPE_HINT: dict[str, str] = {
+    "project_deep_dive": "project_deep_dive",
+    "verify_resume_claim": "project_deep_dive",
+    "claim_verification": "project_deep_dive",
+    "behavioral_probe": "behavioral",
+    "deeper_follow_up": "technical_concept",
+    "increase_difficulty": "technical_concept",
+    "switch_topic": "technical_concept",
+    "strengthen_fundamentals": "technical_concept",
+    "remediation": "technical_concept",
+    "confidence_recovery": "technical_concept",
+    "final_synthesis": "technical_concept",
+}
+
 _CONDITIONAL_FOLLOWUP_TYPES = frozenset({
     "strengthen_fundamentals",
     "remediation",
@@ -212,6 +226,7 @@ async def resolve_primary_next_question(
         )
         return followup_q, updated_trace
 
+    question_type_hint = _DECISION_TO_QTYPE_HINT.get(trace.decision_type, "technical_concept")
     generated = await question_generator.generate_question(
         role=role,
         topic=trace.next_topic or body_current_topic,
@@ -241,6 +256,7 @@ async def resolve_primary_next_question(
                 and trace.next_topic == _normalize_topic(current_topic)
             )
         ),
+        question_type_hint=question_type_hint,
     )
     gen_reason = (
         generated.why_selected

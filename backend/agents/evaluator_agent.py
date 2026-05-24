@@ -235,24 +235,30 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
 
 def _add_rubric_scores(result: EvaluationResult, req: EvaluateAnswerRequest) -> EvaluationResult:
     """
-    Enrich an EvaluationResult with rubric-based scores AND blend rubric_total
-    into technical_score using an asymmetric formula:
+    Phase 3: Enrich an EvaluationResult with profile-aware rubric scores and blend
+    rubric_total into technical_score using an asymmetric formula.
+
+    Profile selection: req.question_type → rubric_profile via _QUESTION_TYPE_TO_PROFILE.
+    Falls back to the default (uniform-weight) rubric when question_type is absent.
 
     Asymmetric rubric blend:
-      • When rubric_total ≥ technical_score:
-          blended = technical×0.55 + rubric×0.45   — rubric provides strong evidence boost
-      • When rubric_total < technical_score:
-          blended = technical×0.85 + rubric×0.15   — rubric slightly anchors, doesn't punish
+      • rubric_total ≥ technical_score → blended = tech×0.55 + rubric×0.45  (boost upward)
+      • rubric_total < technical_score → blended = tech×0.85 + rubric×0.15  (barely anchors)
 
-    Rationale: A candidate who demonstrated deep reasoning (high technical from depth signals)
-    but didn't surface specific rubric keywords should NOT be penalised for that mismatch.
-    Conversely, a keyword-heavy answer with weak depth SHOULD see its score improved by rubric.
+    Extra competence floors for technical_concept (only for substantive answers):
+      • correctness_score ≥ 75 AND depth_score ≥ 75 → floor at 75
+      • ≥ 2 concepts covered AND trade-off or example signals present → floor at 70
     """
     if not req.answer.strip():
         return result
     try:
         topic = getattr(req, "topic", None) or ""
-        rubric_data = rubric.score_with_rubric(req.answer, topic, req.expected_points)
+        question_type = getattr(req, "question_type", None) or ""
+        rubric_profile = rubric._QUESTION_TYPE_TO_PROFILE.get(question_type)
+
+        rubric_data = rubric.score_with_rubric_profile(
+            req.answer, topic, req.expected_points, rubric_profile
+        )
 
         rt = rubric_data["rubric_total"]
         ts = result.technical_score
@@ -266,18 +272,42 @@ def _add_rubric_scores(result: EvaluationResult, req: EvaluateAnswerRequest) -> 
         blended_tech = max(5, min(100, blended_tech))
 
         # Global floor: any substantive attempt (≥ 15 words) shouldn't score below 30.
-        # Prevents rubric vocabulary variation across topics from producing implausibly
-        # low scores for answers that are genuinely weak but not empty.
         if len(req.answer.split()) >= 15:
             blended_tech = max(blended_tech, 30)
 
+        # ── Phase 3: Competence floors for technical_concept ─────────────────
+        # A candidate who clearly understands a concept should not be penalised
+        # for lacking project-language or incomplete rubric keyword coverage.
+        if rubric_profile == "technical_concept" and len(req.answer.split()) >= 30:
+            n_covered = len(result.covered_points)
+            if n_covered >= 1:
+                al = req.answer.lower()
+                has_tradeoff = bool(re.search(
+                    r"\b(trade.?off|however|although|on the other hand"
+                    r"|alternatively|the downside|limitation|caveat)\b", al
+                ))
+                has_example = bool(re.search(
+                    r"\b(for example|such as|specifically|in particular"
+                    r"|to illustrate|e\.g\.|for instance)\b", al
+                ))
+                # Floor 1: strong correctness + depth signals
+                if result.correctness_score >= 75 and result.depth_score >= 75:
+                    blended_tech = max(blended_tech, 75)
+                # Floor 2: near-perfect concept coverage (correctness ≥ 85, 3+ covered)
+                elif result.correctness_score >= 85 and n_covered >= 3:
+                    blended_tech = max(blended_tech, 75)
+                # Floor 3: decent coverage + discourse markers
+                elif n_covered >= 2 and (has_tradeoff or has_example):
+                    blended_tech = max(blended_tech, 70)
+
         return result.model_copy(update={
-            "technical_score":        blended_tech,
-            "rubric_scores":          rubric_data["rubric_scores"],
-            "rubric_total":           rubric_data["rubric_total"],
-            "evidence":               rubric_data["evidence"],
-            "improvement_hint":       rubric_data["improvement_hint"],
-            "interviewer_diagnosis":  rubric_data["interviewer_diagnosis"],
+            "technical_score":       blended_tech,
+            "rubric_scores":         rubric_data["rubric_scores"],
+            "rubric_total":          rubric_data["rubric_total"],
+            "evidence":              rubric_data["evidence"],
+            "improvement_hint":      rubric_data["improvement_hint"],
+            "interviewer_diagnosis": rubric_data["interviewer_diagnosis"],
+            "rubric_profile":        rubric_data.get("rubric_profile", rubric_profile),
         })
     except Exception as exc:
         logger.warning("Rubric scoring failed (non-fatal): %s", exc)

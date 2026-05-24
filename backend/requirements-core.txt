@@ -1,0 +1,23 @@
+# Core backend dependencies for local development.
+# Optional audio/video analysis packages are intentionally excluded so the app
+# can run on Python versions where native wheels are not available.
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+python-multipart==0.0.12
+httpx==0.27.2
+pytest==8.3.3
+pytest-asyncio==0.24.0
+
+motor==3.6.0
+pymongo==4.9.1
+
+pymupdf==1.24.11
+python-docx>=1.1.0
+
+anthropic==0.34.2
+google-genai>=1.0.0
+openai>=1.0.0
+google-generativeai>=0.8.3

@@ -34,4 +34,4 @@ ffmpeg-python==0.2.0
 # Video analysis (optional)
 # Real face detection via OpenCV + MediaPipe.
 opencv-python-headless==4.10.0.84
-mediapipe==0.10.14
+mediapipe==0.10.35
