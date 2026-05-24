@@ -50,6 +50,6 @@ async def get_job_recommendations(candidate_id: str):
         candidate_skills=analysis.skills,
         candidate_level=analysis.experience_level,
         candidate_name=analysis.candidate_name,
-        use_llm_blurb=settings.use_llm,
+        use_llm_blurb=False,  # disabled — 10 LLM calls per request causes timeout
     )
     return result
