@@ -119,7 +119,33 @@ PITCH_CV_VARIABLE  = 0.45        # CV > 0.45 → variable (high)
 PITCH_CV_MONOTONE  = 0.12        # CV < 0.12 → monotone (flat)
 
 WHISPER_MODEL_NAME = os.getenv("AUDIO_TRANSCRIPTION_MODEL", "tiny")
-WHISPER_TIMEOUT_SECONDS = float(os.getenv("AUDIO_ANALYSIS_TIMEOUT_SECONDS", "75"))
+
+# Base timeout (lower-bound).  For longer recordings the timeout is scaled
+# dynamically in analyze() based on estimated audio duration so that a
+# 2-minute answer isn't killed by a 45-second ceiling.
+WHISPER_TIMEOUT_SECONDS = float(os.getenv("AUDIO_ANALYSIS_TIMEOUT_SECONDS", "60"))
+
+# webm/opus bitrate estimate used to infer duration from file size.
+# ~16 kbps = 2 000 B/s  (matches the fallback estimator so both are consistent).
+_BYTES_PER_SECOND_ESTIMATE = 2_000.0
+
+# Safety cap — never wait longer than this regardless of audio length.
+_WHISPER_TIMEOUT_MAX_SECONDS = 300.0
+
+# Multiplier: allow N× estimated audio length for Whisper to finish.
+# tiny model on CPU transcribes at roughly 2–4× real-time; 4× gives headroom.
+_WHISPER_TIMEOUT_MULTIPLIER = 4.0
+
+# beam_size threshold: use greedy decode (beam=1) for long audio to avoid
+# multiplicative cost blow-up across Whisper's 30-second internal windows.
+_BEAM_SIZE_FAST_THRESHOLD_S = 45.0   # audio ≥ 45 s estimated → greedy
+
+# ── Orchestrator guidance thresholds ──────────────────────────────────────────
+# These drive the machine-readable recommendations returned to the intelligence
+# engine.  Centralised here so they are tunable in one place.
+CONFIDENCE_CRITICAL = 40    # below → strong adaptive action needed
+CONFIDENCE_LOW      = 55    # below → mild adaptive action needed
+CLARITY_LOW         = 55    # below → communication coaching recommended
 
 
 # ── Model loader ───────────────────────────────────────────────────────────────
@@ -400,6 +426,228 @@ def _build_notes(
     return notes
 
 
+# ── Orchestrator guidance helpers ──────────────────────────────────────────────
+
+def _pace_label(wpm: float, hesitation_level: str, filler_ratio: float) -> str:
+    """
+    Composite pace label that combines WPM with hesitation and filler signals.
+    More informative than the raw speaking_rate bucket alone.
+
+    Labels (ordered by severity):
+      slow_with_hesitation  — below 95 WPM + high/moderate hesitation
+      slow_with_fillers     — below 95 WPM + moderate fillers
+      slow                  — below 95 WPM, otherwise OK
+      fast_rambling         — above 210 WPM + fillers or hesitation
+      fast_with_fillers     — above 175 WPM + moderate fillers
+      fast                  — above 175 WPM, otherwise OK
+      measured_with_hesitation — 95-175 WPM + high hesitation
+      measured_with_pauses  — 95-175 WPM + moderate hesitation
+      good_pace             — 95-175 WPM, hesitation low, fillers low
+    """
+    if wpm < WPM_SLOW_THRESHOLD:
+        if hesitation_level in ("high", "moderate"):
+            return "slow_with_hesitation"
+        if filler_ratio > FILLER_RATIO_MOD:
+            return "slow_with_fillers"
+        return "slow"
+    if wpm > WPM_FAST_THRESHOLD:
+        if wpm > 210 and (hesitation_level != "low" or filler_ratio > FILLER_RATIO_MOD):
+            return "fast_rambling"
+        if filler_ratio > FILLER_RATIO_MOD:
+            return "fast_with_fillers"
+        return "fast"
+    # 95–175 WPM range — inspect hesitation
+    if hesitation_level == "high":
+        return "measured_with_hesitation"
+    if hesitation_level == "moderate":
+        return "measured_with_pauses"
+    return "good_pace"
+
+
+def _detect_audio_issue(
+    hesitation_level: str,
+    filler_ratio: float,
+    wpm: float,
+    word_count: int,
+    pitch_stability: str,
+    pause_count: int,
+) -> Optional[str]:
+    """
+    Identify the single most prominent communication issue.
+    Returns a plain-English string or None when no notable issue found.
+    Priority order: brevity → hesitation → fillers → pace → pitch.
+    """
+    if word_count < 20:
+        return "Very brief response — insufficient detail for reliable assessment"
+    if hesitation_level == "high" and pause_count >= 3:
+        return f"High hesitation with {pause_count} long pauses detected"
+    if hesitation_level == "high":
+        return "High hesitation markers detected (frequent filler words or repeated restarts)"
+    if filler_ratio > FILLER_RATIO_HIGH:
+        return f"Excessive filler words ({round(filler_ratio * 100)}% of speech)"
+    if hesitation_level == "moderate" and pause_count >= 2:
+        return f"Moderate hesitation — {pause_count} pauses and some filler words"
+    if wpm < 70:
+        return f"Very slow pace ({int(wpm)} WPM) suggesting uncertainty or difficulty recalling"
+    if wpm > 210:
+        return f"Very fast pace ({int(wpm)} WPM) suggesting nervousness or rushing"
+    if filler_ratio > FILLER_RATIO_MOD:
+        return f"Moderate filler word usage ({round(filler_ratio * 100)}% of speech)"
+    if pitch_stability == "monotone":
+        return "Monotone delivery — limited vocal engagement across the response"
+    return None  # no prominent issue
+
+
+def _orchestrator_recommendation(
+    confidence: int,
+    clarity: int,
+    hesitation_level: str,
+    word_count: int,
+) -> str:
+    """
+    Machine-readable hint for the intelligence engine.
+
+    The intelligence engine uses this alongside the technical score to decide:
+    - whether to decrease difficulty
+    - whether to add an encouragement note to the next question
+    - whether to ask for a structured re-explanation
+    """
+    if confidence < CONFIDENCE_CRITICAL and clarity < CLARITY_LOW:
+        return "give_encouragement_and_ask_simpler_question"
+    if confidence < CONFIDENCE_LOW and hesitation_level == "high":
+        return "reduce_difficulty_and_add_encouragement"
+    if confidence < CONFIDENCE_LOW:
+        return "monitor_confidence_maintain_difficulty"
+    if clarity < CLARITY_LOW and word_count < 30:
+        return "ask_for_structured_elaboration"
+    if clarity < CLARITY_LOW:
+        return "request_clearer_explanation"
+    if confidence >= 75 and clarity >= 75:
+        return "increase_difficulty"
+    return "continue_standard_flow"
+
+
+def _coaching_tip(
+    hesitation_level: str,
+    filler_ratio: float,
+    wpm: float,
+    clarity: int,
+    word_count: int,
+) -> Optional[str]:
+    """
+    Return the single highest-impact coaching tip for the candidate.
+    Priority matches _detect_audio_issue to be consistent.
+    """
+    if word_count < 20:
+        return (
+            "Structure your answer: define the concept, give a real example, "
+            "then discuss the main trade-off."
+        )
+    if hesitation_level == "high" and filler_ratio > FILLER_RATIO_MOD:
+        return (
+            "Replace 'um' and 'uh' with a 1-second silence — "
+            "it sounds more confident and gives you thinking time."
+        )
+    if hesitation_level == "high":
+        return (
+            "Try the pause-before-answer technique: take 3 seconds of silence "
+            "to collect your thoughts before responding."
+        )
+    if filler_ratio > FILLER_RATIO_HIGH:
+        return (
+            "Practice speaking in short, structured sentences: "
+            "Problem → Approach → Trade-off → Result."
+        )
+    if wpm > 200:
+        return (
+            "Slow down and emphasise key technical terms — "
+            "interviewers need processing time for complex concepts."
+        )
+    if wpm < 80:
+        return (
+            "Increase your pace slightly — aim for 110-140 WPM "
+            "for confident, natural technical delivery."
+        )
+    if clarity < CLARITY_LOW:
+        return (
+            "Use the STAR method: Situation → Task → Action → Result "
+            "to give structured, memorable answers."
+        )
+    return None
+
+
+def _audio_reasoning_summary(
+    wpm: float,
+    hesitation_level: str,
+    filler_ratio: float,
+    confidence: int,
+    clarity: int,
+    pause_count: int,
+    word_count: int,
+) -> str:
+    """
+    Plain-English narrative summarising the audio analysis for the UI and
+    final feedback report.  Written to be read by the candidate, not a developer.
+    """
+    # Response length description
+    if word_count < 20:
+        length_desc = "very brief"
+    elif word_count >= 80:
+        length_desc = f"well-developed ({word_count} words)"
+    else:
+        length_desc = f"moderate length ({word_count} words)"
+
+    # Pace description
+    if wpm < 80:
+        pace_desc = f"slow pace ({int(wpm)} WPM)"
+    elif wpm > 200:
+        pace_desc = f"fast pace ({int(wpm)} WPM) suggesting some nervousness"
+    else:
+        pace_desc = f"natural pace ({int(wpm)} WPM)"
+
+    # Hesitation
+    if hesitation_level == "high":
+        hesit_desc = f"{pause_count} notable pauses with high hesitation markers"
+    elif hesitation_level == "moderate":
+        hesit_desc = f"some hesitation ({pause_count} pauses)"
+    else:
+        hesit_desc = "minimal hesitation"
+
+    # Fillers
+    if filler_ratio > FILLER_RATIO_HIGH:
+        filler_desc = f" and excessive filler words ({round(filler_ratio * 100)}% of speech)"
+    elif filler_ratio > FILLER_RATIO_MOD:
+        filler_desc = f" and some filler words ({round(filler_ratio * 100)}% of speech)"
+    else:
+        filler_desc = ""
+
+    summary = (
+        f"Response was {length_desc}, delivered at a {pace_desc}, "
+        f"with {hesit_desc}{filler_desc}."
+    )
+
+    # Overall score interpretation
+    if confidence >= 70 and clarity >= 70:
+        summary += " Overall delivery was confident and clear."
+    elif confidence < CONFIDENCE_CRITICAL and clarity < CLARITY_LOW:
+        summary += (
+            " Both confidence and communication clarity were below expectations — "
+            "targeted practice will help significantly."
+        )
+    elif confidence < CONFIDENCE_LOW:
+        summary += (
+            " Confidence indicators were below target — "
+            "consider pacing, pause reduction, and filler awareness."
+        )
+    elif clarity < CLARITY_LOW:
+        summary += (
+            " Communication structure could be improved with "
+            "clearer examples and a more structured answer format."
+        )
+
+    return summary
+
+
 def _invalid_audio_result(transcript: str, duration_s: float, word_count: int, wpm: float, mode: str) -> dict:
     return {
         "status":                        "invalid_audio",
@@ -425,15 +673,49 @@ def _invalid_audio_result(transcript: str, duration_s: float, word_count: int, w
         "volume_energy_proxy":           None,
         "tone_proxy":                    "insufficient_audio",
         "metrics_source":                mode if mode in ("faster_whisper", "whisper") else "heuristic",
+        # Orchestrator guidance — None for invalid audio
+        "pace_label":                    None,
+        "detected_issue":                "Very brief response — insufficient detail for reliable assessment",
+        "recommendation_to_orchestrator": "give_encouragement_and_ask_simpler_question",
+        "coaching_tip":                  (
+            "Structure your answer: define the concept, give a real example, "
+            "then discuss the main trade-off."
+        ),
+        "audio_reasoning_summary":       (
+            "Audio could not be reliably analysed — the recording was too short "
+            "or contained no detectable speech."
+        ),
     }
 
 
 # ── Whisper analysers ──────────────────────────────────────────────────────────
 
 def _analyze_faster_whisper(audio_path: str) -> dict:
-    model          = _get_model()
-    segments, info = model.transcribe(audio_path, beam_size=5, word_timestamps=False)
-    seg_list       = list(segments)
+    model = _get_model()
+
+    # Estimate audio duration from file size so we can pick an efficient
+    # beam_size before spending CPU cycles transcribing.
+    import os as _os_local
+    file_size_bytes = _os_local.path.getsize(audio_path)
+    est_duration_s  = max(2.0, file_size_bytes / _BYTES_PER_SECOND_ESTIMATE)
+
+    # For longer audio each Whisper 30-second window is processed separately;
+    # beam_size=5 multiplies cost by 5 per window.  Greedy (beam=1) is ~3-5×
+    # faster with minimal accuracy loss on clear interview speech.
+    beam_size = 1 if est_duration_s >= _BEAM_SIZE_FAST_THRESHOLD_S else 5
+
+    logger.debug(
+        "faster_whisper: file=%d B, est=%.1fs, beam_size=%d",
+        file_size_bytes, est_duration_s, beam_size,
+    )
+
+    segments, info = model.transcribe(
+        audio_path,
+        beam_size=beam_size,
+        word_timestamps=False,
+        condition_on_previous_text=True,  # maintain context across 30-s windows
+    )
+    seg_list = list(segments)
 
     transcript   = " ".join(s.text.strip() for s in seg_list).strip() or "[No speech detected]"
     duration_s   = max(info.duration, 0.01)
@@ -482,6 +764,22 @@ def _analyze_faster_whisper(audio_path: str) -> dict:
         "tone_proxy":                    "measured_speech_proxy",
         "metrics_source":                "whisper",
         "reason":                        None,
+        # Orchestrator guidance
+        "pace_label":                    _pace_label(wpm, hesitation_level, filler_ratio),
+        "detected_issue":                _detect_audio_issue(
+                                             hesitation_level, filler_ratio, wpm,
+                                             word_count, pitch_stability, pause_count
+                                         ),
+        "recommendation_to_orchestrator": _orchestrator_recommendation(
+                                             confidence, clarity, hesitation_level, word_count
+                                         ),
+        "coaching_tip":                  _coaching_tip(
+                                             hesitation_level, filler_ratio, wpm, clarity, word_count
+                                         ),
+        "audio_reasoning_summary":       _audio_reasoning_summary(
+                                             wpm, hesitation_level, filler_ratio,
+                                             confidence, clarity, pause_count, word_count
+                                         ),
     }
 
 
@@ -536,6 +834,22 @@ def _analyze_openai_whisper(audio_path: str) -> dict:
         "tone_proxy":                    "measured_speech_proxy",
         "metrics_source":                "whisper",
         "reason":                        None,
+        # Orchestrator guidance
+        "pace_label":                    _pace_label(wpm, hesitation_level, filler_ratio),
+        "detected_issue":                _detect_audio_issue(
+                                             hesitation_level, filler_ratio, wpm,
+                                             word_count, pitch_stability, pause_count
+                                         ),
+        "recommendation_to_orchestrator": _orchestrator_recommendation(
+                                             confidence, clarity, hesitation_level, word_count
+                                         ),
+        "coaching_tip":                  _coaching_tip(
+                                             hesitation_level, filler_ratio, wpm, clarity, word_count
+                                         ),
+        "audio_reasoning_summary":       _audio_reasoning_summary(
+                                             wpm, hesitation_level, filler_ratio,
+                                             confidence, clarity, pause_count, word_count
+                                         ),
     }
 
 
@@ -605,6 +919,16 @@ def _analyze_fallback(file_bytes: bytes) -> dict:
         "tone_proxy":                    "heuristic_unknown",
         "metrics_source":                "heuristic",
         "reason":                        None,
+        # Orchestrator guidance — conservative values in fallback mode
+        "pace_label":                    _pace_label(float(wpm_est), hesitation_level, 0.0),
+        "detected_issue":                None,   # can't detect real issues without transcript
+        "recommendation_to_orchestrator": "continue_standard_flow",
+        "coaching_tip":                  None,
+        "audio_reasoning_summary":       (
+            f"Analysis performed in fallback mode — Whisper transcription not available. "
+            f"Estimated duration: {int(duration_s)}s at approximately {wpm_est} WPM. "
+            "Scores are conservative heuristic estimates only."
+        ),
     }
 
 
@@ -619,9 +943,27 @@ async def analyze(file_bytes: bytes, filename: str = "audio.webm") -> dict:
     Whisper inference is CPU-bound and synchronous.  We offload it to the
     default ThreadPoolExecutor so the FastAPI event loop is never blocked,
     which allows audio + video to run concurrently via asyncio.gather().
+
+    Timeout is DYNAMIC: we estimate audio duration from file size and allow
+    up to _WHISPER_TIMEOUT_MULTIPLIER × that estimate, floored at
+    WHISPER_TIMEOUT_SECONDS and capped at _WHISPER_TIMEOUT_MAX_SECONDS.
+    This prevents a fixed 45-second ceiling from killing 60-120 second answers
+    where Whisper (tiny, CPU, beam_size=5) legitimately needs more time.
     """
     if _ENGINE == "fallback":
         return _analyze_fallback(file_bytes)
+
+    # ── Dynamic timeout ───────────────────────────────────────────────────────
+    # Estimate duration before writing to disk (avoids extra stat call).
+    estimated_duration_s = max(2.0, len(file_bytes) / _BYTES_PER_SECOND_ESTIMATE)
+    timeout = min(
+        _WHISPER_TIMEOUT_MAX_SECONDS,
+        max(WHISPER_TIMEOUT_SECONDS, estimated_duration_s * _WHISPER_TIMEOUT_MULTIPLIER),
+    )
+    logger.info(
+        "audio analyze: %d B, est_duration=%.1fs, whisper_timeout=%.0fs",
+        len(file_bytes), estimated_duration_s, timeout,
+    )
 
     suffix = Path(filename).suffix or ".webm"
     tmp    = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
@@ -633,22 +975,25 @@ async def analyze(file_bytes: bytes, filename: str = "audio.webm") -> dict:
         if _ENGINE == "faster_whisper":
             return await asyncio.wait_for(
                 asyncio.to_thread(_analyze_faster_whisper, tmp.name),
-                timeout=WHISPER_TIMEOUT_SECONDS,
+                timeout=timeout,
             )
         return await asyncio.wait_for(
             asyncio.to_thread(_analyze_openai_whisper, tmp.name),
-            timeout=WHISPER_TIMEOUT_SECONDS,
+            timeout=timeout,
         )
 
     except asyncio.TimeoutError:
         logger.warning(
-            "Whisper analysis timed out after %.0fs - falling back to heuristics.",
-            WHISPER_TIMEOUT_SECONDS,
+            "Whisper analysis timed out after %.0fs (est_duration=%.1fs) — "
+            "falling back to heuristics.",
+            timeout, estimated_duration_s,
         )
         result = _analyze_fallback(file_bytes)
         result["analysis_notes"].insert(
             0,
-            f"Whisper transcription timed out after {int(WHISPER_TIMEOUT_SECONDS)}s; heuristic scoring used for this turn.",
+            f"Whisper transcription timed out after {int(timeout)}s "
+            f"(estimated audio: {int(estimated_duration_s)}s); "
+            "heuristic scoring used for this turn.",
         )
         result["reason"] = "Whisper transcription timed out."
         return result

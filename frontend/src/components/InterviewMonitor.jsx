@@ -30,7 +30,7 @@
  *   disabled       {boolean}  — disables recording controls while answer is submitted
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { analyzeMediaCombined } from "../services/interviewService";
 
 // ── State machine ─────────────────────────────────────────────────────────────
@@ -64,6 +64,41 @@ function rateColor(r) {
 
 function motionColor(m) {
   return m === "low" ? "text-green-600" : m === "medium" ? "text-yellow-500" : "text-red-500";
+}
+
+// ── Orchestrator recommendation → human label ─────────────────────────────────
+const RECOMMENDATION_LABELS = {
+  give_encouragement_and_ask_simpler_question: "AI will simplify next question & add encouragement",
+  reduce_difficulty_and_add_encouragement:     "AI adapting: slightly easier question with encouragement",
+  monitor_confidence_maintain_difficulty:      "AI monitoring confidence — difficulty unchanged",
+  ask_for_structured_elaboration:              "AI will ask for a more structured response",
+  request_clearer_explanation:                 "AI will request a clearer explanation",
+  increase_difficulty:                         "Strong delivery — AI increasing the challenge",
+  // "continue_standard_flow" → don't show
+};
+
+// ── Pace label → compact display ──────────────────────────────────────────────
+const PACE_DISPLAY = {
+  good_pace:               { label: "Good",     color: "text-green-600" },
+  slow_with_hesitation:    { label: "Hesitant", color: "text-orange-500" },
+  slow_with_fillers:       { label: "Slow+",    color: "text-orange-500" },
+  slow:                    { label: "Slow",      color: "text-blue-500" },
+  fast_rambling:           { label: "Rushing",  color: "text-red-500" },
+  fast_with_fillers:       { label: "Fast+",    color: "text-orange-500" },
+  fast:                    { label: "Fast",      color: "text-orange-500" },
+  measured_with_hesitation:{ label: "Hesitant", color: "text-yellow-500" },
+  measured_with_pauses:    { label: "Paused",   color: "text-yellow-500" },
+};
+
+// ── Live heuristic observation during recording ────────────────────────────────
+// Based purely on elapsed seconds — no actual AI inference, intentionally lightweight.
+function liveObservation(elapsed) {
+  if (elapsed < 5)  return "Starting response…";
+  if (elapsed < 15) return "Response detected · Engagement tracking active";
+  if (elapsed < 30) return "Speaking detected · Presence analysis running";
+  if (elapsed < 50) return "Extended response · AI building context";
+  if (elapsed < 75) return "Detailed answer in progress";
+  return "Comprehensive response · Multimodal signals captured";
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -108,6 +143,67 @@ function AudioWaveform() {
           }}
         />
       ))}
+    </div>
+  );
+}
+
+// Threshold: show the full transcript when word count is below this; otherwise
+// collapse with an expand button so long answers don't push everything off-screen.
+const TRANSCRIPT_COLLAPSE_WORDS = 60;
+
+/**
+ * TranscriptBox — shows the Whisper transcript with a word count badge.
+ * Collapses to ~4 lines for answers longer than TRANSCRIPT_COLLAPSE_WORDS words;
+ * a "Show full" toggle reveals the complete text without any clipping.
+ * This replaces the previous `line-clamp-5` approach which permanently hid
+ * the latter part of extended answers, misleading the user about how much
+ * was actually captured.
+ */
+function TranscriptBox({ transcript, wordCount, onUse }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = (wordCount ?? transcript.split(/\s+/).length) > TRANSCRIPT_COLLAPSE_WORDS;
+
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-xl p-2.5">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+          Transcript
+        </p>
+        {wordCount > 0 && (
+          <span className="text-[9px] text-gray-400 font-medium">
+            {wordCount} words
+          </span>
+        )}
+      </div>
+
+      {/* Full text — collapsed or expanded -------------------------------- */}
+      <p className={`text-[11px] text-gray-700 leading-relaxed ${
+        isLong && !expanded ? "line-clamp-4" : ""
+      }`}>
+        {transcript}
+      </p>
+
+      {/* Controls --------------------------------------------------------- */}
+      <div className="flex items-center gap-3 mt-1.5">
+        {isLong && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="text-[10px] text-gray-400 hover:text-gray-600 font-medium
+              underline underline-offset-2 transition-colors"
+          >
+            {expanded ? "Show less ↑" : "Show full ↓"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onUse}
+          className="text-[10px] text-indigo-600 hover:text-indigo-700 font-medium
+            underline underline-offset-2 transition-colors"
+        >
+          Use as answer ↗
+        </button>
+      </div>
     </div>
   );
 }
@@ -193,6 +289,13 @@ export default function InterviewMonitor({
     videoChunks.current = [];
 
     // Audio-only recorder (clean audio for Whisper)
+    // IMPORTANT: do NOT use timeslicing (no interval arg to start()).
+    // Timesliced mode writes chunks whose WebM container header only knows
+    // the start-of-recording duration — concatenating N chunks produces a
+    // blob where the duration metadata is wrong, which can cause ffmpeg/Whisper
+    // to stop reading early on longer answers.
+    // With start() (no timeslice), the browser produces ONE self-contained,
+    // well-formed WebM file when stop() fires — the safest input for Whisper.
     const audioStream = new MediaStream(stream.getAudioTracks());
     const audioMime = [
       "audio/webm;codecs=opus",
@@ -206,7 +309,10 @@ export default function InterviewMonitor({
     aRec.ondataavailable = (e) => {
       if (e.data?.size > 0) audioChunks.current.push(e.data);
     };
-    aRec.start(250); // collect every 250 ms
+    // No timeslice — single complete blob on stop().
+    // The browser buffers the entire recording in memory; for opus at ~16 kbps
+    // a 2-minute answer is only ~240 KB, so memory is not a concern.
+    aRec.start();
     audioRecRef.current = aRec;
 
     // Video recorder (full stream — backend uses video frames for OpenCV/MediaPipe)
@@ -244,12 +350,24 @@ export default function InterviewMonitor({
 
     function tryUpload() {
       if (!audioDone || !videoDone) return;
+
+      // Guard: never upload an empty audio blob — that would give Whisper
+      // nothing to work with and produce an "invalid_audio" result.
+      if (!audioBlob || audioBlob.size === 0) {
+        setError("Audio recording captured no data. Please try recording again.");
+        setMs(MS.error);
+        return;
+      }
       doUpload(audioBlob, videoBlob);
     }
 
     const aRec = audioRecRef.current;
     const vRec = videoRecRef.current;
 
+    // ── Audio finalization ────────────────────────────────────────────────
+    // Since we use start() without timeslicing, ondataavailable fires ONCE
+    // (with the complete audio) immediately before onstop fires.
+    // We wait for onstop so the chunk is guaranteed to be in audioChunks.current.
     if (aRec && aRec.state !== "inactive") {
       aRec.onstop = () => {
         audioBlob = new Blob(audioChunks.current, { type: "audio/webm" });
@@ -257,24 +375,37 @@ export default function InterviewMonitor({
         tryUpload();
       };
       aRec.stop();
-    } else {
+    } else if (aRec) {
+      // Recorder exists but already in inactive state (e.g. auto-stop race).
       audioBlob = new Blob(audioChunks.current, { type: "audio/webm" });
+      audioDone = true;
+    } else {
+      // No audio recorder at all — mark done with empty blob (guard above will catch it).
+      audioBlob = new Blob([], { type: "audio/webm" });
       audioDone = true;
     }
 
+    // ── Video finalization ─────────────────────────────────────────────────
+    // Video uses timeslicing (500 ms) so videoChunks has N partial chunks.
+    // requestData() flushes any data buffered since the last chunk before we
+    // call stop() — ensures the final partial window isn't lost.
     if (vRec && vRec.state !== "inactive") {
+      try { vRec.requestData(); } catch (_) { /* ignore if browser doesn't support */ }
       vRec.onstop = () => {
         videoBlob = new Blob(videoChunks.current, { type: "video/webm" });
         videoDone = true;
         tryUpload();
       };
       vRec.stop();
-    } else {
+    } else if (vRec) {
       videoBlob = new Blob(videoChunks.current, { type: "video/webm" });
+      videoDone = true;
+    } else {
+      videoBlob = new Blob([], { type: "video/webm" });
       videoDone = true;
     }
 
-    // Handles the case where both were already stopped/null
+    // Check if both were already in inactive/null state (handles re-stop edge case).
     tryUpload();
   }
 
@@ -366,14 +497,18 @@ export default function InterviewMonitor({
           </span>
         </div>
 
-        {/* Disable button */}
+        {/* Stop camera button */}
         {isActive && !isProcessing && (
           <button
             type="button"
             onClick={disable}
-            className="text-[10px] text-gray-400 hover:text-red-500 transition-colors"
+            title="Stop camera"
+            aria-label="Stop camera"
+            className="text-gray-300 hover:text-red-400 transition-colors"
           >
-            Disable
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         )}
       </div>
@@ -511,6 +646,16 @@ export default function InterviewMonitor({
           </button>
         )}
 
+        {/* ── LIVE OBSERVATION TICKER (recording state) ────────────────────── */}
+        {ms === MS.recording && (
+          <div className="flex items-center gap-2 px-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
+            <p className="text-[10px] text-indigo-600 font-medium">
+              {liveObservation(elapsed)}
+            </p>
+          </div>
+        )}
+
         {/* ── ERROR state ───────────────────────────────────────────────────── */}
         {ms === MS.error && (
           <div className="space-y-2.5">
@@ -536,14 +681,14 @@ export default function InterviewMonitor({
                   ? "bg-amber-50 text-amber-700 border-amber-200"
                   : "bg-green-50 text-green-700 border-green-200"}`}
               >
-                {audioResult.mode === "fallback" ? "Audio: Heuristic" : "Audio: Whisper AI"}
+                {audioResult.mode === "fallback" ? "Audio analysis" : "Audio: Whisper AI"}
               </span>
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border uppercase tracking-wide
                 ${videoResult.mode === "fallback"
                   ? "bg-amber-50 text-amber-700 border-amber-200"
                   : "bg-green-50 text-green-700 border-green-200"}`}
               >
-                {videoResult.mode === "fallback"          ? "Video: Heuristic"
+                {videoResult.mode === "fallback"          ? "Video analysis"
                   : videoResult.mode === "opencv_mediapipe" ? "Video: MediaPipe AI"
                   : "Video: OpenCV"}
               </span>
@@ -570,15 +715,25 @@ export default function InterviewMonitor({
                   value={audioResult.communication_clarity_score}
                   colorFn={scoreColor}
                 />
-                <TextPill
-                  label="Pace"
-                  value={
-                    audioResult.speaking_rate === "medium" ? "Med"
-                      : audioResult.speaking_rate === "fast" ? "Fast"
-                      : "Slow"
+                {/* Pace — use rich pace_label when available */}
+                {(() => {
+                  const pd = PACE_DISPLAY[audioResult.pace_label];
+                  if (pd) {
+                    return (
+                      <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-2.5 py-2 min-w-[54px]">
+                        <span className={`text-sm font-extrabold leading-none ${pd.color}`}>{pd.label}</span>
+                        <span className="text-[9px] text-gray-400 mt-0.5 text-center leading-tight">Pace</span>
+                      </div>
+                    );
                   }
-                  colorFn={rateColor}
-                />
+                  return (
+                    <TextPill
+                      label="Pace"
+                      value={audioResult.speaking_rate === "medium" ? "Med" : audioResult.speaking_rate === "fast" ? "Fast" : "Slow"}
+                      colorFn={rateColor}
+                    />
+                  );
+                })()}
                 <div className="flex flex-col items-center bg-white border border-gray-200 rounded-xl px-2.5 py-2 min-w-[54px]">
                   <span className="text-sm font-extrabold leading-none text-gray-700">
                     {audioResult.pause_count ?? "—"}
@@ -596,7 +751,7 @@ export default function InterviewMonitor({
               </div>
             </div>
 
-            {/* ── Presence metrics (video) ──────────────────────────────────── */}
+            {/* ── Visual Presence (interpreted labels) ──────────────────────── */}
             {videoResult.status !== "invalid_analysis" && (
               <div>
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
@@ -607,32 +762,134 @@ export default function InterviewMonitor({
                          C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.964-7.178z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  Presence
+                  Visual Presence
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {videoResult.engagement_score != null && (
-                    <ScorePill label="Engagement" value={videoResult.engagement_score} colorFn={scoreColor} />
-                  )}
-                  {videoResult.framing_score != null && (
-                    <ScorePill label="Framing" value={videoResult.framing_score} colorFn={scoreColor} />
-                  )}
-                  {videoResult.stability_score != null && (
-                    <ScorePill label="Stability" value={videoResult.stability_score} colorFn={scoreColor} />
-                  )}
-                  {videoResult.movement_activity && (
-                    <TextPill
-                      label="Motion"
-                      value={
-                        videoResult.movement_activity === "low"  ? "Calm"
-                          : videoResult.movement_activity === "medium" ? "Mod"
-                          : "High"
-                      }
-                      colorFn={motionColor}
-                    />
-                  )}
+                <div className="grid grid-cols-2 gap-1.5">
+
+                  {/* Eye Contact — derived from framing_score */}
+                  {videoResult.framing_score != null && (() => {
+                    const s = videoResult.framing_score;
+                    const label = s >= 70 ? "Stable" : s >= 50 ? "Acceptable" : "Off-centre";
+                    const color = s >= 70 ? "text-green-600" : s >= 50 ? "text-yellow-500" : "text-orange-500";
+                    return (
+                      <div className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                        <span className="text-[10px] text-gray-500">Eye Contact</span>
+                        <span className={`text-[11px] font-bold ${color}`}>{label}</span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Movement — derived from movement_activity */}
+                  {videoResult.movement_activity && (() => {
+                    const m = videoResult.movement_activity;
+                    const label = m === "low" ? "Still" : m === "medium" ? "Natural" : "Active";
+                    const color = m === "high" ? "text-orange-500" : "text-green-600";
+                    return (
+                      <div className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                        <span className="text-[10px] text-gray-500">Movement</span>
+                        <span className={`text-[11px] font-bold ${color}`}>{label}</span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Engagement — derived from engagement_score */}
+                  {videoResult.engagement_score != null && (() => {
+                    const s = videoResult.engagement_score;
+                    const label = s >= 70 ? "Strong" : s >= 55 ? "Moderate" : "Low";
+                    const color = s >= 70 ? "text-green-600" : s >= 55 ? "text-yellow-500" : "text-orange-500";
+                    return (
+                      <div className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                        <span className="text-[10px] text-gray-500">Engagement</span>
+                        <span className={`text-[11px] font-bold ${color}`}>{label}</span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Nervousness — derived from nervousness_proxy_score */}
+                  {videoResult.nervousness_proxy_score != null && (() => {
+                    const s = videoResult.nervousness_proxy_score;
+                    const label = s < 30 ? "Calm" : s < 50 ? "Mild" : "Elevated";
+                    const color = s < 30 ? "text-green-600" : s < 50 ? "text-yellow-500" : "text-red-500";
+                    return (
+                      <div className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
+                        <span className="text-[10px] text-gray-500">Nervousness</span>
+                        <span className={`text-[11px] font-bold ${color}`}>{label}</span>
+                      </div>
+                    );
+                  })()}
+
                 </div>
                 {videoResult.warning && (
                   <p className="text-[10px] text-amber-600 mt-1.5">{videoResult.warning}</p>
+                )}
+              </div>
+            )}
+
+            {/* ── AI Intelligence Narrative ─────────────────────────── */}
+            {(audioResult.audio_reasoning_summary ||
+              audioResult.coaching_tip ||
+              (videoResult.visual_reasoning_summary && videoResult.status !== "invalid_analysis")) && (
+              <div className="space-y-2 pt-1 border-t border-gray-100">
+                <p className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                  </svg>
+                  AI Analysis
+                </p>
+
+                {/* Audio reasoning narrative */}
+                {audioResult.audio_reasoning_summary && (
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2.5">
+                    <p className="text-[11px] text-indigo-900 leading-relaxed">
+                      {audioResult.audio_reasoning_summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Visual reasoning narrative */}
+                {videoResult.visual_reasoning_summary && videoResult.status !== "invalid_analysis" && (
+                  <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2.5">
+                    <p className="text-[11px] text-violet-900 leading-relaxed">
+                      {videoResult.visual_reasoning_summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Coaching tip — highest-impact actionable advice */}
+                {audioResult.coaching_tip && (
+                  <div className="flex gap-2 items-start bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                    <svg className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round"
+                        d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18" />
+                    </svg>
+                    <p className="text-[11px] text-amber-900 leading-relaxed font-medium">
+                      <span className="font-semibold text-amber-700">Coaching: </span>
+                      {audioResult.coaching_tip}
+                    </p>
+                  </div>
+                )}
+
+                {/* Orchestrator recommendation — shows how AI adapted */}
+                {RECOMMENDATION_LABELS[audioResult.recommendation_to_orchestrator] && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
+                    <p className="text-[10px] text-indigo-700 font-semibold">
+                      {RECOMMENDATION_LABELS[audioResult.recommendation_to_orchestrator]}
+                    </p>
+                  </div>
+                )}
+
+                {/* Video nervousness indicator — only when elevated */}
+                {videoResult.nervousness_proxy_score != null && videoResult.nervousness_proxy_score >= 45 && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                    <p className="text-[10px] text-amber-700">
+                      {videoResult.nervousness_proxy_score >= 65
+                        ? "Visual signals suggest elevated nervousness — AI will add encouragement."
+                        : "Mild nervousness indicators detected — AI is monitoring."}
+                    </p>
+                  </div>
                 )}
               </div>
             )}
@@ -648,33 +905,11 @@ export default function InterviewMonitor({
 
             {/* ── Transcript ─────────────────────────────────────────────────── */}
             {audioResult.transcript && !audioResult.transcript.startsWith("[") && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-2.5">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                  Transcript
-                </p>
-                <p className="text-[11px] text-gray-700 leading-relaxed line-clamp-5">
-                  {audioResult.transcript}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onTranscript?.(audioResult.transcript)}
-                  className="mt-1.5 text-[10px] text-indigo-600 hover:text-indigo-700 font-medium
-                    underline underline-offset-2 transition-colors"
-                >
-                  Use as answer ↗
-                </button>
-              </div>
-            )}
-
-            {/* Heuristic mode notice */}
-            {(audioResult.mode === "fallback" || videoResult.mode === "fallback") && (
-              <p className="text-[10px] text-amber-600 leading-snug">
-                Heuristic scores shown — install{" "}
-                {audioResult.mode === "fallback" ? "faster-whisper" : ""}
-                {audioResult.mode === "fallback" && videoResult.mode === "fallback" ? " + " : ""}
-                {videoResult.mode === "fallback" ? "opencv-python" : ""}{" "}
-                for AI-powered analysis.
-              </p>
+              <TranscriptBox
+                transcript={audioResult.transcript}
+                wordCount={audioResult.word_count}
+                onUse={() => onTranscript?.(audioResult.transcript)}
+              />
             )}
 
             {/* Record again */}

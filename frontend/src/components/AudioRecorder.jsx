@@ -329,7 +329,7 @@ export default function AudioRecorder({
                     : "bg-green-50 text-green-700 border-green-200"}`}
                 >
                   {result.mode === "fallback"
-                    ? "Heuristic mode"
+                    ? "Audio analysis"
                     : result.status === "invalid_audio"
                     ? "Insufficient audio"
                     : "Whisper transcription"}

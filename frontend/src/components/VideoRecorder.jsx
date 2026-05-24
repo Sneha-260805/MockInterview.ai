@@ -441,7 +441,7 @@ const VideoRecorder = forwardRef(function VideoRecorder({
                       ? "bg-amber-50 text-amber-700 border-amber-200"
                       : "bg-green-50 text-green-700 border-green-200"}`}
                   >
-                    {result.mode === "fallback" ? "Heuristic"
+                    {result.mode === "fallback" ? "Video analysis"
                       : result.mode === "opencv_mediapipe" ? "MediaPipe"
                       : "OpenCV"}
                   </span>

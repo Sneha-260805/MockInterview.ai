@@ -30,3 +30,18 @@ class VideoAnalysisResponse(BaseModel):
     stress_nervousness_indicator: Optional[str] = None
     nervousness_score:   Optional[int] = None
     metrics_source:      str = "heuristic"
+
+    # ── Orchestrator guidance (new) ───────────────────────────────────────────
+    # Explicit nervousness proxy (0-100, higher = more nervous).
+    # Derived from movement_activity + framing instability + low engagement.
+    nervousness_proxy_score: Optional[int] = None
+
+    # Looking-away proxy (0-100, lower = more eye-contact-like framing).
+    # Derived from framing_score inversion.
+    looking_away_proxy_score: Optional[int] = None
+
+    # Plain-English narrative describing the full video analysis result.
+    visual_reasoning_summary: Optional[str] = None
+
+    # Machine-readable hint for the intelligence engine / orchestrator.
+    recommendation_to_orchestrator: Optional[str] = None

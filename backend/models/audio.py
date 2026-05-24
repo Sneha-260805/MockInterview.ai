@@ -44,3 +44,20 @@ class AudioAnalysisResponse(BaseModel):
     volume_energy_proxy: Optional[int] = None
     tone_proxy: str = "unknown"
     metrics_source: str = "heuristic"
+
+    # ── Orchestrator guidance (new) ───────────────────────────────────────────
+    # Composite human-readable pace label that combines WPM + hesitation + fillers.
+    # More informative than the raw speaking_rate bucket for the UI and orchestrator.
+    pace_label: Optional[str] = None          # e.g. "good_pace" | "slow_with_hesitation" | "fast_rambling"
+
+    # Single most prominent communication issue detected (plain-English).
+    detected_issue: Optional[str] = None      # e.g. "High hesitation and several long pauses"
+
+    # Machine-readable hint for the intelligence engine / orchestrator.
+    recommendation_to_orchestrator: Optional[str] = None  # e.g. "reduce_difficulty_and_add_encouragement"
+
+    # Actionable single coaching tip for the candidate (shown post-answer).
+    coaching_tip: Optional[str] = None        # e.g. "Use a 3-step structure before going into details"
+
+    # Plain-English narrative describing the full audio analysis result.
+    audio_reasoning_summary: Optional[str] = None

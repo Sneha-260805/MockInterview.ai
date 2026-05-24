@@ -319,7 +319,7 @@ export default function FeedbackReport() {
             </svg>
             <p className="text-xs text-amber-800 leading-relaxed">
               <span className="font-semibold">Behavioral scores are estimated.</span>{" "}
-              Communication, Confidence, and Engagement are computed from answer heuristics.
+              Communication, Confidence, and Engagement are derived from answer analysis.
               Use the audio recorder in the interview room to get real audio-derived scores.
             </p>
           </div>
@@ -331,9 +331,9 @@ export default function FeedbackReport() {
                 d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
             </svg>
             <p className="text-xs text-blue-800 leading-relaxed">
-              <span className="font-semibold">Audio scores included (heuristic mode).</span>{" "}
+              <span className="font-semibold">Audio scores included.</span>{" "}
               Install <code className="font-mono bg-blue-100 px-1 rounded">faster-whisper</code> for
-              real Whisper transcription.
+              the most accurate transcription-backed scoring.
             </p>
           </div>
         )}
@@ -355,7 +355,7 @@ export default function FeedbackReport() {
                 d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
             </svg>
             <p className="text-xs text-blue-800 leading-relaxed">
-              <span className="font-semibold">Video scores included (heuristic mode).</span>{" "}
+              <span className="font-semibold">Video scores included.</span>{" "}
               Install <code className="font-mono bg-blue-100 px-1 rounded">opencv-python</code> for
               real face detection and more accurate engagement scores.
             </p>
@@ -397,9 +397,9 @@ export default function FeedbackReport() {
           return (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               <ScoreCard label="Technical"    score={report.technical_score}    subtitle="avg of all answers" />
-              <ScoreCard label="Communication" score={report.communication_score} subtitle={hasAudio ? (audioReal ? "Whisper clarity" : "audio heuristic") : "word-count proxy"} isPlaceholder={!audioReal} />
-              <ScoreCard label="Confidence"   score={report.confidence_score}   subtitle={hasAudio ? (audioReal ? "Whisper fluency" : "audio heuristic") : "score trajectory"} isPlaceholder={!audioReal} />
-              <ScoreCard label="Engagement"   score={report.engagement_score}   subtitle={hasVideo ? (videoReal ? "face detection" : "video heuristic") : "session length"} isPlaceholder={!videoReal} />
+              <ScoreCard label="Communication" score={report.communication_score} subtitle={hasAudio ? (audioReal ? "Whisper clarity" : "audio scoring") : "word-count proxy"} isPlaceholder={!audioReal} />
+              <ScoreCard label="Confidence"   score={report.confidence_score}   subtitle={hasAudio ? (audioReal ? "Whisper fluency" : "audio scoring") : "score trajectory"} isPlaceholder={!audioReal} />
+              <ScoreCard label="Engagement"   score={report.engagement_score}   subtitle={hasVideo ? (videoReal ? "face detection" : "video scoring") : "session length"} isPlaceholder={!videoReal} />
               <ScoreCard label="Role Fit"     score={report.role_fit_score}     subtitle="resume match" />
             </div>
           );

@@ -27,6 +27,7 @@ always generated as the fallback.
 import json
 import logging
 from pathlib import Path
+import asyncio
 
 from models.jobs import JobListing, JobMatch, JobRecommendationResponse
 
@@ -304,26 +305,84 @@ async def recommend(
     # Normalise candidate skills to canonical tokens once
     candidate_canonicals: set[str] = {_canonical(s) for s in candidate_skills}
 
-    scored: list[tuple[int, JobMatch]] = []
-
+    # First: score all jobs deterministically (no LLM calls)
+    intermediate: list[dict] = []
     for job in jobs:
         matched, missing = _match_skills(candidate_canonicals, job.required_skills)
-        bonus  = _exp_bonus(candidate_level, job.experience)
-        sc     = _score(matched, len(job.required_skills), bonus)
-
+        bonus = _exp_bonus(candidate_level, job.experience)
+        sc = _score(matched, len(job.required_skills), bonus)
         if sc < _MIN_SCORE:
             continue
+        intermediate.append({
+            "job": job,
+            "matched": matched,
+            "missing": missing,
+            "score": sc,
+        })
 
-        # Generate why_fit
+    # Sort descending and take top-N candidates
+    intermediate.sort(key=lambda e: -e["score"])
+    top_entries = intermediate[:_TOP_N]
+
+    # Optionally call LLM for concise 'why_fit' blurbs concurrently (bounded concurrency)
+    llm_results: list[str | None] = [None] * len(top_entries)
+    settings = None
+    if use_llm_blurb:
+        from config import get_settings
+        settings = get_settings()
+
+    async def _gather_llm_blurbs(entries, candidate_name, candidate_skills, max_concurrency=3):
+        sem = asyncio.Semaphore(max_concurrency)
+
+        async def _run(entry):
+            async with sem:
+                try:
+                    return await _llm_why_fit(
+                        entry["job"], entry["matched"], entry["missing"], entry["score"],
+                        candidate_name, candidate_skills,
+                    )
+                except Exception as exc:
+                    logger.warning("LLM why_fit task failed: %s", exc)
+                    return None
+
+        tasks = [asyncio.create_task(_run(e)) for e in entries]
+        if not tasks:
+            return []
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+        # Normalize to str|None
+        out = []
+        for r in gathered:
+            if isinstance(r, Exception):
+                out.append(None)
+            else:
+                out.append(r)
+        return out
+
+    if use_llm_blurb and settings and settings.has_llm_configured:
+        try:
+            llm_results = await _gather_llm_blurbs(top_entries, candidate_name, candidate_skills, max_concurrency=3)
+        except Exception as exc:
+            logger.warning("Bulk LLM gather failed: %s", exc)
+
+    # Build final JobMatch list, using LLM blurb when available and falling back to rule-based text
+    scored: list[tuple[int, JobMatch]] = []
+    for idx, entry in enumerate(top_entries):
+        job = entry["job"]
+        matched = entry["matched"]
+        missing = entry["missing"]
+        sc = entry["score"]
+
         why = None
         why_source = "rule_based_fallback"
-        if use_llm_blurb:
-            why = await _llm_why_fit(
-                job, matched, missing, sc, candidate_name, candidate_skills
-            )
-            if why:
+        # Use LLM result if provided (call_llm already enforces per-provider timeout)
+        if llm_results and idx < len(llm_results) and llm_results[idx]:
+            why = llm_results[idx]
+            try:
                 from config import get_settings
                 why_source = f"llm:{get_settings().llm_provider.lower()}"
+            except Exception:
+                why_source = "llm"
+
         if not why:
             why = _why_fit_rule(matched, missing, sc, job.title, job.company, candidate_name)
 
@@ -351,9 +410,7 @@ async def recommend(
             ),
         ))
 
-    # Sort descending by score, take top N
-    scored.sort(key=lambda t: -t[0])
-    results = [match for _, match in scored[:_TOP_N]]
+    results = [match for _, match in scored]
 
     return JobRecommendationResponse(
         candidate_id=candidate_id,

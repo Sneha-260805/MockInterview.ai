@@ -1056,6 +1056,7 @@ def make_next_question_decision(
     video_engagement = int(video_score.get("engagement_score", 100)) if video_score else 100
     visual_stress = (video_score or {}).get("stress_indicator") or (video_score or {}).get("stress_nervousness_indicator")
     combined_score = int(multimodal_score.get("combined_score", tech_score)) if multimodal_score else tech_score
+    multimodal_signal = (multimodal_score or {}).get("multimodal_signal", "average_performance")
     (
         signal_scores,
         confidence_available,
@@ -1161,6 +1162,42 @@ def make_next_question_decision(
             + (f"missing {', '.join(missing[:2])}" if missing else "unclear fundamentals")
             + ". Returning to foundational concepts."
         )
+
+    if multimodal_signal == "strong_technical_low_confidence":
+        if decision_type == "deeper_follow_up":
+            decision_type = "confidence_recovery"
+            detected_issue = (
+                f"Strong technical answer ({tech_score}/100) but low vocal confidence detected. "
+                "Keeping difficulty and adding encouragement to help the candidate relax."
+            )
+    elif multimodal_signal == "weak_technical_low_confidence":
+        if decision_type not in ("remediation", "strengthen_fundamentals"):
+            decision_type = "strengthen_fundamentals"
+            detected_issue = (
+                f"Low technical score ({tech_score}/100) combined with low behavioural confidence. "
+                "Stepping back to accessible fundamentals to rebuild understanding and composure."
+            )
+    elif multimodal_signal == "weak_technical_needs_coaching":
+        if decision_type not in ("remediation", "strengthen_fundamentals", "confidence_recovery"):
+            decision_type = "confidence_recovery"
+            detected_issue = (
+                f"Technical gaps ({tech_score}/100) paired with low confidence signal. "
+                "Choosing a more structured, accessible question to build momentum."
+            )
+    elif multimodal_signal == "strong_candidate":
+        if decision_type != "increase_difficulty":
+            decision_type = "increase_difficulty"
+            detected_issue = (
+                f"Strong candidate signal - technical ({tech_score}/100), confidence, and communication "
+                "are all above threshold. Increasing challenge."
+            )
+    elif multimodal_signal == "confidence_and_engagement_low":
+        if decision_type not in ("confidence_recovery", "remediation"):
+            decision_type = "confidence_recovery"
+            detected_issue = (
+                "Both confidence and engagement signals are low. "
+                "Switching to a more accessible question with positive framing."
+            )
 
     # TODO(behavioral_probe): inject a behavioral question when len(session_history) >= 2
     # and no behavioral topic has been covered — defer to orchestrator fallback for now.
@@ -1414,6 +1451,8 @@ def make_next_question_decision(
             evidence.append(f"Video engagement: not available; stress proxy: {stress_label}")
     if multimodal_score:
         evidence.append(f"Combined multimodal score: {combined_score}/100")
+        if multimodal_signal and multimodal_signal != "average_performance":
+            evidence.append(f"Multimodal signal: {multimodal_signal.replace('_', ' ')}")
     if covered:
         evidence.append(f"Covered: {', '.join(covered[:2])}")
     if missing:

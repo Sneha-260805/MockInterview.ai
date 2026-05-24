@@ -395,6 +395,7 @@ def _rule_feedback(
     session_data: dict | None = None,
     analysis=None,
     audio_scores: list | None = None,
+    video_scores: list | None = None,
 ) -> str:
     """
     Flowing multi-paragraph narrative feedback.
@@ -513,6 +514,7 @@ def _rule_feedback(
 
     # ── Paragraph 4: Communication coaching + behavioural observation ─────────
     comm_lines: list[str] = []
+    top_coaching_tip: str | None = None
 
     if audio_scores:
         real_audio = [a for a in audio_scores if a.get("mode") in ("faster_whisper", "whisper")]
@@ -541,6 +543,13 @@ def _rule_feedback(
                     "there were frequent mid-answer pauses; try the 'think → speak' habit: "
                     "take 3 seconds of silence before answering rather than thinking aloud"
                 )
+
+    if audio_scores:
+        for a in reversed([a for a in audio_scores if a.get("mode") in ("faster_whisper", "whisper")]):
+            tip = a.get("coaching_tip")
+            if tip:
+                top_coaching_tip = tip
+                break
 
     if comm_lines:
         intro = "On the communication side, "
@@ -573,6 +582,30 @@ def _rule_feedback(
         )
 
     # ── Paragraph 5: Action plan with project hook ────────────────────────────
+    if top_coaching_tip:
+        p4 += f" One concrete habit to build: {top_coaching_tip}"
+
+    p4b = ""
+    if video_scores:
+        valid_vids = [v for v in video_scores if v.get("status") != "invalid_analysis"]
+        if valid_vids:
+            vis_summaries = [
+                v.get("visual_reasoning_summary", "")
+                for v in valid_vids
+                if v.get("visual_reasoning_summary")
+            ]
+            if vis_summaries:
+                p4b = f"Visually, {vis_summaries[-1].rstrip('.')}.".replace("Video analysis shows ", "")
+                high_nervousness = [
+                    v for v in valid_vids
+                    if (v.get("nervousness_proxy_score") or 0) >= 50
+                ]
+                if high_nervousness:
+                    p4b += (
+                        " Consider practising in front of a mirror or camera to reduce visible tension â€” "
+                        "interviewers often mirror the energy of the person they are speaking to."
+                    )
+
     proj_hook = ""
     if analysis and getattr(analysis, "projects", []):
         proj  = analysis.projects[0]
@@ -594,7 +627,7 @@ def _rule_feedback(
     p5 = proj_hook + next_step
 
     # Assemble — skip empty paragraphs
-    paragraphs = [p for p in [p1, p2, p3, p4, p5] if p.strip()]
+    paragraphs = [p for p in [p1, p2, p3, p4, p4b, p5] if p.strip()]
     return "\n\n".join(paragraphs)
 
 
@@ -602,6 +635,8 @@ async def _llm_feedback(
     session_data: dict, analysis,
     role: str, scores: dict,
     strengths: list[str], improvements: list[str],
+    audio_scores: list | None = None,
+    video_scores: list | None = None,
 ) -> str | None:
     from config import get_settings
     settings = get_settings()
@@ -617,6 +652,33 @@ async def _llm_feedback(
             for i, a in enumerate(session_data.get("answers", []))
         )
         name = (analysis.candidate_name if analysis else "") or "the candidate"
+        audio_context = ""
+        if audio_scores:
+            real_audio = [a for a in audio_scores if a.get("mode") in ("faster_whisper", "whisper")]
+            if real_audio:
+                summaries = [
+                    a.get("audio_reasoning_summary", "")
+                    for a in real_audio
+                    if a.get("audio_reasoning_summary")
+                ]
+                tips = [a.get("coaching_tip", "") for a in real_audio if a.get("coaching_tip")]
+                if summaries:
+                    audio_context += f"\nAudio analysis: {summaries[-1]}"
+                if tips:
+                    audio_context += f"\nTop coaching tip: {tips[-1]}"
+
+        video_context = ""
+        if video_scores:
+            valid_vids = [v for v in video_scores if v.get("status") != "invalid_analysis"]
+            vis_summaries = [
+                v.get("visual_reasoning_summary", "")
+                for v in valid_vids
+                if v.get("visual_reasoning_summary")
+            ]
+            if vis_summaries:
+                video_context = f"\nVideo analysis: {vis_summaries[-1]}"
+
+        multimodal_section = (audio_context + video_context).strip()
         prompt = (
             f"You are a senior technical hiring manager writing a final interview report.\n\n"
             f"Candidate: {name}\n"
@@ -626,12 +688,14 @@ async def _llm_feedback(
             f"Engagement: {scores['eng']}/100 | Role Fit: {scores['role_fit']}/100\n\n"
             f"Q&A summary:\n{qa_lines}\n\n"
             f"Key strengths: {', '.join(strengths[:3]) or 'none identified'}\n"
-            f"Areas to improve: {', '.join(improvements[:3]) or 'none identified'}\n\n"
-            "Write 3-4 paragraphs of personalised final feedback. Be encouraging but honest. "
+            f"Areas to improve: {', '.join(improvements[:3]) or 'none identified'}\n"
+            + (f"\nMultimodal behavioural signals:\n{multimodal_section}\n" if multimodal_section else "")
+            + "\nWrite 3-4 paragraphs of personalised final feedback. Be encouraging but honest. "
             "Name specific topics they covered well and specific gaps to address. "
+            "If audio/video signals are provided, weave them into the communication coaching paragraph naturally. "
             "End with one concrete actionable next step. Plain prose — no bullets, no headings."
         )
-        result = await call_llm(prompt, max_tokens=650)
+        result = await call_llm(prompt, max_tokens=700)
         return result.strip() if result else None
     except Exception as exc:
         logger.warning("LLM final feedback failed: %s", exc)
@@ -909,7 +973,9 @@ async def generate_report(
         "comm": comm, "conf": conf, "eng": eng, "role_fit": role_fit,
     }
     final_feedback = await _llm_feedback(
-        session_data, analysis, role, scores_dict, strengths, improvements
+        session_data, analysis, role, scores_dict, strengths, improvements,
+        audio_scores=audio_scores,
+        video_scores=video_scores,
     )
     final_feedback_source = "rule_based_fallback"
     if not final_feedback:
@@ -918,6 +984,7 @@ async def generate_report(
             session_data=session_data,
             analysis=analysis,
             audio_scores=audio_scores,
+            video_scores=video_scores,
         )
     else:
         from config import get_settings

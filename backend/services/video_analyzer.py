@@ -159,6 +159,90 @@ def _face_info_mediapipe(frame_bgr, detector) -> dict:
             "edge_margin": edge_margin}
 
 
+# ── Orchestrator guidance helper ──────────────────────────────────────────────
+
+def _compute_video_extras(
+    engagement: Optional[int],
+    framing: Optional[int],
+    stability: Optional[int],
+    movement: Optional[str],
+    detection_rate: float,
+) -> dict:
+    """
+    Derive orchestrator guidance fields from already-computed video scores.
+    Safe to call for invalid_analysis paths — returns None for derived scores.
+
+    nervousness_proxy_score  (0-100, higher = more nervous indicators)
+      Combines high movement + poor framing + low engagement.
+
+    looking_away_proxy_score (0-100, lower = more eye-contact-like framing)
+      Simple inversion of framing_score.
+
+    visual_reasoning_summary — plain-English narrative for UI / final report.
+
+    recommendation_to_orchestrator — machine-readable hint for the intelligence engine.
+    """
+    # ── Nervousness proxy ──────────────────────────────────────────────────────
+    if engagement is None or framing is None:
+        nervousness_proxy: Optional[int] = None
+    else:
+        movement_penalty   = {"high": 35, "medium": 15, "low": 0}.get(movement or "low", 0)
+        framing_penalty    = max(0, (50 - framing)) // 2      # low framing → more nervous
+        engagement_penalty = max(0, (50 - engagement)) // 2   # low engagement → more nervous
+        nervousness_proxy  = int(min(100, max(0,
+            movement_penalty + framing_penalty + engagement_penalty)))
+
+    # ── Looking-away proxy ─────────────────────────────────────────────────────
+    looking_away_proxy: Optional[int] = (100 - framing) if framing is not None else None
+
+    # ── Visual reasoning summary ───────────────────────────────────────────────
+    if engagement is None:
+        visual_summary = (
+            "Visual analysis could not be completed — face was not consistently "
+            "visible. Ensure your face is well-lit and centred in the camera frame."
+        )
+    else:
+        eng_desc   = ("strong" if engagement >= 75 else
+                      "adequate" if engagement >= 55 else "limited") + " camera presence"
+        frame_desc = ("well-centred" if (framing or 0) >= 70 else
+                      "acceptable" if (framing or 0) >= 50 else "off-centre") + " framing"
+        if stability is None:
+            stab_desc = "insufficient data for stability analysis"
+        elif stability >= 70:
+            stab_desc = "stable camera distance"
+        elif stability >= 50:
+            stab_desc = "moderate distance variation"
+        else:
+            stab_desc = "significant movement or distance changes"
+        move_desc = (
+            "High head movement was detected, which may indicate nervousness." if movement == "high"
+            else "Moderate head movement observed." if movement == "medium"
+            else "Physical composure was good with minimal head movement."
+        )
+        visual_summary = (
+            f"Video analysis shows {eng_desc}, {frame_desc}, and {stab_desc}. {move_desc}"
+        )
+
+    # ── Recommendation to orchestrator ─────────────────────────────────────────
+    if engagement is None:
+        rec = "request_better_video_setup"
+    elif nervousness_proxy is not None and nervousness_proxy >= 60:
+        rec = "acknowledge_nervousness_and_encourage"
+    elif engagement < 40 and (framing is None or framing < 40):
+        rec = "request_better_video_setup"
+    elif nervousness_proxy is not None and nervousness_proxy >= 35:
+        rec = "note_nervousness_monitor_confidence"
+    else:
+        rec = "no_video_action_needed"
+
+    return {
+        "nervousness_proxy_score":        nervousness_proxy,
+        "looking_away_proxy_score":       looking_away_proxy,
+        "visual_reasoning_summary":       visual_summary,
+        "recommendation_to_orchestrator": rec,
+    }
+
+
 # ── Score computation ─────────────────────────────────────────────────────────
 
 def _scores_from_frames(frame_data: list[dict]) -> dict:
@@ -178,6 +262,7 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
     """
     total = len(frame_data)
     if total == 0:
+        extras = _compute_video_extras(None, None, None, None, 0.0)
         return {
             "status":              "invalid_analysis",
             "reason":              "No frames could be extracted from the video.",
@@ -188,6 +273,7 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
             "face_detection_rate": 0.0,
             "analysis_notes":      [],
             "warning":             None,
+            **extras,
         }
 
     # ── Gap analysis: detect camera-blocked / candidate-left-frame ────────────
@@ -201,6 +287,7 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
             cur_gap = 0
 
     if max_gap > _MAX_INVALID_GAP:
+        extras = _compute_video_extras(None, None, None, None, round(sum(presence) / total, 3))
         return {
             "status": "invalid_analysis",
             "reason": (
@@ -215,6 +302,7 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
             "face_detection_rate": round(sum(presence) / total, 3),
             "analysis_notes":      [],
             "warning":             None,
+            **extras,
         }
 
     # ── Passerby intrusion filter ─────────────────────────────────────────────
@@ -256,6 +344,7 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
                     f"The longest gap without a face was {max_gap} frames. "
                 )
             reason += "Try recording alone in a quiet space facing the camera directly."
+        extras = _compute_video_extras(None, None, None, None, round(detection_rate, 3))
         return {
             "status":              "invalid_analysis",
             "reason":              reason,
@@ -266,6 +355,7 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
             "face_detection_rate": round(detection_rate, 3),
             "analysis_notes":      [],
             "warning":             None,
+            **extras,
         }
 
     notes: list[str] = []
@@ -385,6 +475,7 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
     else:
         movement = "low"
 
+    extras = _compute_video_extras(engagement, framing, stability, movement, round(detection_rate, 3))
     return {
         "status":              "ok",
         "engagement_score":    engagement,
@@ -394,6 +485,7 @@ def _scores_from_frames(frame_data: list[dict]) -> dict:
         "face_detection_rate": round(detection_rate, 3),
         "analysis_notes":      notes,
         "warning":             warning,
+        **extras,
     }
 
 
@@ -498,6 +590,7 @@ def _analyze_fallback(file_bytes: bytes, is_image: bool) -> dict:
     movement_r = rng.random()
     movement   = "low" if movement_r > 0.65 else ("high" if movement_r < 0.20 else "medium")
 
+    extras = _compute_video_extras(engagement, framing, None, movement, face_rate)
     return {
         "status":              "ok",
         "engagement_score":    engagement,
@@ -519,6 +612,7 @@ def _analyze_fallback(file_bytes: bytes, is_image: bool) -> dict:
         "stress_nervousness_indicator": movement,
         "nervousness_score": 35 if movement == "low" else 60 if movement == "medium" else 82,
         "metrics_source": "heuristic",
+        **extras,
     }
 
 
@@ -558,7 +652,7 @@ async def analyze(file_bytes: bytes, filename: str = "capture.webm") -> dict:
         else:
             # Frame extraction reads the whole video — offload to thread pool
             frames = await loop.run_in_executor(
-                None, lambda: _extract_frames(tmp.name, max_frames=30)
+                None, lambda: _extract_frames(tmp.name, max_frames=15)
             )
 
         if not frames:

@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Optional: install audio/video packages if you want them in Docker
 # Uncomment the lines below to enable real Whisper + OpenCV support:
-# RUN pip install --no-cache-dir faster-whisper
-# RUN pip install --no-cache-dir opencv-python-headless mediapipe
+RUN pip install --no-cache-dir faster-whisper
+RUN pip install --no-cache-dir opencv-python-headless mediapipe
 
 # Copy application source
 COPY . .
