@@ -199,10 +199,12 @@ function TextPreview({ text }) {
 
 function Tag({ label, variant = "blue" }) {
   const styles = {
-    blue: "bg-blue-50 text-blue-700 border-blue-100",
-    green: "bg-green-50 text-green-700 border-green-100",
+    blue:   "bg-blue-50 text-blue-700 border-blue-100",
+    green:  "bg-green-50 text-green-700 border-green-100",
     purple: "bg-purple-50 text-purple-700 border-purple-100",
-    gray: "bg-gray-100 text-gray-600 border-gray-200",
+    gray:   "bg-gray-100 text-gray-600 border-gray-200",
+    amber:  "bg-amber-50 text-amber-700 border-amber-200",
+    red:    "bg-red-50 text-red-700 border-red-100",
   };
   return (
     <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${styles[variant]}`}>
@@ -402,6 +404,144 @@ function AnalysisPanel({ analysis, roles }) {
             </ul>
           </Section>
         )}
+
+        {/* ── Interview Intelligence (Gemini-powered) ──────────────────── */}
+        {(() => {
+          const hasIntelligence =
+            analysis.strong_skills?.length > 0 ||
+            analysis.weak_or_missing_areas?.length > 0 ||
+            analysis.interview_risks?.length > 0 ||
+            analysis.claims_to_verify?.length > 0 ||
+            analysis.project_deep_dives?.length > 0 ||
+            analysis.suggested_interview_probes?.length > 0;
+          if (!hasIntelligence) return null;
+          return (
+            <div className="border-t-2 border-indigo-100 pt-5 space-y-5">
+              {/* Section header */}
+              <div className="flex items-center gap-2.5">
+                <svg className="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                <span className="text-sm font-bold text-indigo-700">Interview Intelligence</span>
+                <span className="flex-1 h-px bg-indigo-100" />
+                <span className="text-[10px] font-semibold text-indigo-500 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
+                  AI-powered
+                </span>
+              </div>
+
+              {/* Strong Skills */}
+              {analysis.strong_skills?.length > 0 && (
+                <Section title="Strong Skills — Evidenced by Resume">
+                  <div className="flex flex-wrap gap-2">
+                    {analysis.strong_skills.map((s) => (
+                      <span key={s} className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border bg-green-50 text-green-700 border-green-200">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Weak / Missing Areas */}
+              {analysis.weak_or_missing_areas?.length > 0 && (
+                <Section title="Weak / Missing Areas">
+                  <div className="flex flex-wrap gap-2">
+                    {analysis.weak_or_missing_areas.map((s) => (
+                      <Tag key={s} label={s} variant="amber" />
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Interview Risks */}
+              {analysis.interview_risks?.length > 0 && (
+                <Section title="Interview Risks">
+                  <div className="space-y-2">
+                    {analysis.interview_risks.map((r, i) => (
+                      <div key={i} className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl px-3.5 py-2.5">
+                        <svg className="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                        </svg>
+                        <p className="text-sm text-red-800">{r}</p>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Claims to Verify — visually prominent */}
+              {analysis.claims_to_verify?.length > 0 && (
+                <Section title="Claims to Verify in Interview">
+                  <div className="space-y-3">
+                    {analysis.claims_to_verify.map((c, i) => (
+                      <div key={i} className="bg-violet-50 border-2 border-violet-200 rounded-xl overflow-hidden">
+                        <div className="px-4 py-2.5 bg-violet-100 border-b border-violet-200 flex items-start gap-2">
+                          <svg className="w-3.5 h-3.5 text-violet-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0016.803 15.803z" />
+                          </svg>
+                          <div>
+                            <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wider mb-0.5">Claim</p>
+                            <p className="text-sm font-semibold text-violet-900">"{c.claim}"</p>
+                          </div>
+                        </div>
+                        <div className="px-4 py-3 space-y-2.5">
+                          <div>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Why verify</p>
+                            <p className="text-xs text-gray-600 leading-relaxed">{c.why_verify}</p>
+                          </div>
+                          <div className="bg-white border border-violet-100 rounded-lg px-3 py-2.5">
+                            <p className="text-[10px] font-bold text-violet-600 uppercase tracking-wider mb-1">Probe question</p>
+                            <p className="text-xs text-violet-800 font-medium leading-relaxed">"{c.probe_question}"</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Project Deep Dives */}
+              {analysis.project_deep_dives?.length > 0 && (
+                <Section title="Project Deep Dives">
+                  <div className="space-y-3">
+                    {analysis.project_deep_dives.map((pd, i) => (
+                      <div key={i} className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+                        <p className="text-sm font-semibold text-blue-900">{pd.project}</p>
+                        <p className="text-xs text-blue-600 mt-0.5 leading-relaxed">{pd.why_selected}</p>
+                        {pd.probe_topics?.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2.5">
+                            {pd.probe_topics.map((t) => (
+                              <span key={t} className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              )}
+
+              {/* Suggested Interview Probes */}
+              {analysis.suggested_interview_probes?.length > 0 && (
+                <Section title="Suggested Interview Probes">
+                  <ul className="space-y-2">
+                    {analysis.suggested_interview_probes.map((p, i) => (
+                      <li key={i} className="flex items-start gap-2.5 bg-indigo-50 border border-indigo-100 rounded-xl px-3.5 py-2.5">
+                        <span className="text-indigo-500 font-bold text-sm mt-0.5 shrink-0">?</span>
+                        <p className="text-sm text-indigo-800">{p}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </Section>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Role CTA */}
         {roles?.recommended_roles?.length > 0 && (

@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 
 ADZUNA_BASE_URL = "https://api.adzuna.com/v1/api/jobs/us/search/1"
 
+_LEVEL_TO_EXPERIENCE = {
+    "junior":  "0-2 years",
+    "mid":     "2-5 years",
+    "senior":  "5+ years",
+}
+
 async def fetch_live_jobs(candidate_skills: list[str], candidate_level: str) -> list[JobListing]:
     """
     Fetch real jobs from Adzuna using candidate skills as keywords.
@@ -44,6 +50,7 @@ async def fetch_live_jobs(candidate_skills: list[str], candidate_level: str) -> 
             response.raise_for_status()
             data = response.json()
 
+        experience_label = _LEVEL_TO_EXPERIENCE.get(candidate_level, "1-3 years")
         jobs = []
         for i, item in enumerate(data.get("results", [])):
             # Extract skills from description (simple keyword match)
@@ -55,7 +62,7 @@ async def fetch_live_jobs(candidate_skills: list[str], candidate_level: str) -> 
                 title=item.get("title", "Software Developer"),
                 company=item.get("company", {}).get("display_name", "Unknown Company"),
                 location=item.get("location", {}).get("display_name", "India"),
-                experience="1-3 years",
+                experience=experience_label,
                 description=description[:300] + "..." if len(description) > 300 else description,
                 required_skills=required_skills,
                 apply_url=item.get("redirect_url", ""),

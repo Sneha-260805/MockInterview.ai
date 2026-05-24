@@ -91,11 +91,28 @@ export default function JobRecommendation() {
       {/* ── Results ───────────────────────────────────────────────────────── */}
       {status === STATUS.done && data && (
         <>
-          {/* Stats banner */}
-          {!data.is_live && (
-            <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm">
-              Showing sample/fallback jobs, not current live postings.
-              {data.fallback_reason ? ` ${data.fallback_reason}` : ""}
+          {/* Fallback / live data banner */}
+          {data.is_live ? (
+            <div className="mb-6 flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+              <span className="w-2 h-2 rounded-full bg-green-500 shrink-0 animate-pulse" />
+              <p className="text-sm text-green-800">
+                <span className="font-semibold">Live job data</span> — these are real current postings matched to your skills.
+              </p>
+            </div>
+          ) : (
+            <div className="mb-6 bg-amber-50 border-2 border-amber-300 rounded-xl px-5 py-4">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+                <div>
+                  <p className="text-sm font-bold text-amber-800">Demo Fallback Data</p>
+                  <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+                    These are sample job listings for demonstration purposes — not current live postings.
+                    {data.fallback_reason ? ` ${data.fallback_reason}` : " Configure Adzuna API credentials to see live jobs."}
+                  </p>
+                </div>
+              </div>
             </div>
           )}
           {data.recommended_jobs.length > 0 && (() => {

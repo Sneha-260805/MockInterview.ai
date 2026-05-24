@@ -472,6 +472,7 @@ export default function InterviewRoom() {
               reason={adaptationReason}
               questionNumber={questionNumber}
               maxQuestions={maxQuestions}
+              decisionType={decisionTrace?.decision_type}
             />
           )}
 

@@ -94,12 +94,22 @@ export default function JobCard({ job, candidateId }) {
           <h3 className="text-base font-bold text-gray-900 leading-snug">{job.title}</h3>
           <p className="text-sm font-medium text-brand-600 mt-0.5">{job.company}</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <span className={`inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full border ${
               job.is_live
                 ? "bg-green-50 text-green-700 border-green-200"
-                : "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-amber-50 text-amber-700 border-amber-300"
             }`}>
-              {job.is_live ? `Live via ${job.source || "provider"}` : "Sample / fallback job"}
+              {job.is_live ? (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  LIVE via {job.source || "provider"}
+                </>
+              ) : (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  SAMPLE
+                </>
+              )}
             </span>
             {job.remote === true && (
               <span className="inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-200">
@@ -143,6 +153,23 @@ export default function JobCard({ job, candidateId }) {
 
         {/* ── Description ──────────────────────────────────────────────────── */}
         <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">{job.description}</p>
+
+        {/* ── Application readiness ────────────────────────────────────────── */}
+        {(() => {
+          const s = job.match_score;
+          const [label, cls, tip] =
+            s >= 75
+              ? ["Application Ready", "bg-green-50 border-green-200 text-green-700", "Strong skill match — apply now"]
+              : s >= 50
+              ? ["Almost Ready", "bg-yellow-50 border-yellow-200 text-yellow-700", "Good fit — address 1-2 skill gaps first"]
+              : ["Stretch Role", "bg-orange-50 border-orange-200 text-orange-700", "Good for growth — prepare extra before applying"];
+          return (
+            <div className={`flex items-center gap-2 rounded-xl px-3.5 py-2 border ${cls}`}>
+              <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
+              <span className="text-[10px] opacity-70 ml-auto">{tip}</span>
+            </div>
+          );
+        })()}
 
         {/* ── Why fit ──────────────────────────────────────────────────────── */}
         <div className="flex items-start gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">

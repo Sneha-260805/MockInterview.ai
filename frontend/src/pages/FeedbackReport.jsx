@@ -278,9 +278,16 @@ export default function FeedbackReport() {
           </div>
         </div>
 
-        {/* ── Phase 11: Readiness banner ────────────────────────────────────── */}
+        {/* ── Interview Readiness ───────────────────────────────────────────── */}
         {readiness && (
-          <div className={`flex items-start gap-4 border rounded-2xl px-6 py-5 ${readiness.color}`}>
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Interview Readiness</span>
+            </div>
+          <div className={`flex items-start gap-4 border-2 rounded-2xl px-6 py-5 ${readiness.color}`}>
             <div className="shrink-0 w-10 h-10 rounded-full bg-white/60 flex items-center justify-center">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d={readiness.icon} />
@@ -307,6 +314,7 @@ export default function FeedbackReport() {
                 </div>
               </div>
             )}
+          </div>
           </div>
         )}
 

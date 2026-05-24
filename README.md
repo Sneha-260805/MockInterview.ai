@@ -1,22 +1,120 @@
-# Intelligent Mock Interview Agent
+# MockInterview.ai — Intelligent Mock Interview Agent
 
-> An end-to-end AI-powered interview preparation platform built as a hackathon project.  
-> Upload your resume → get personalised role & job matches → practice adaptive mock interviews → receive a multimodal feedback report with audio and video intelligence.
+> An end-to-end AI-powered interview preparation platform.  
+> Upload your resume → get AI-reasoned role and job matches → practice an adaptive mock interview → receive an explainable multimodal feedback report.
 
 ---
 
-## Features
+## Project Flow
 
-| # | Feature | Description |
+```
+Resume Upload
+     │
+     ▼
+Resume Intelligence        ← Gemini: claims to verify, project deep-dives, interview risks
+     │
+     ▼
+Role Recommendations       ← Gemini: why this role fits, resume evidence, realistic vs stretch
+     │
+     ▼
+Job Recommendations        ← Live (Adzuna) or sample fallback, ranked by skill match
+     │
+     ▼
+Adaptive Interview         ← Agent selects topic + difficulty based on your live signals
+     │
+     ▼
+Agent Trace Reasoning      ← Observation → Decision → Reason → Evidence → Next Action
+     │
+     ▼
+Multimodal Scoring         ← Technical answers + audio behavioral signals + video engagement
+     │
+     ▼
+Explainable Feedback       ← Readiness verdict, skill mastery map, 7-day plan, per-question breakdown
+```
+
+---
+
+## Key Features
+
+| # | Feature | How it works |
 |---|---------|-------------|
-| 1 | **Resume Intelligence** | Upload PDF/TXT → LLM/rule extraction of skills, experience, projects, strengths and weak areas |
-| 2 | **Role Recommendations** | Match resume against 8 engineering roles; ranked by skill overlap |
-| 3 | **Job Recommendations** | Score 50 curated job listings against your skills; canonical alias matching |
-| 4 | **Adaptive Mock Interviews** | 5-question sessions that adjust difficulty based on your last score |
-| 5 | **Real-time Evaluation** | Per-answer technical, depth and correctness scores with covered/missing point breakdown |
-| 6 | **Final Feedback Report** | Radar chart + bar chart + personalised learning plan + LLM/rule-based feedback |
-| 7 | **Audio Intelligence** | Optional mic recording → Whisper transcription → confidence, clarity, pause & pace scores |
-| 8 | **Video Intelligence** | Optional webcam → OpenCV/MediaPipe face analysis → engagement, eye-contact, posture & stress |
+| 1 | **Resume Intelligence** | Three-stage pipeline: regex/rule extraction → Gemini normalization → Gemini interview-intelligence reasoning. Produces claims to verify, project deep-dives, interview risks, and strong/weak skill signals. |
+| 2 | **Explainable Role Recommendations** | 15 engineering roles scored on core skills, bonus skills, project evidence, and experience affinity. Gemini adds: why this role fits, resume evidence, gaps, interview focus, and realistic vs stretch label. |
+| 3 | **Live Job Recommendations** | Adzuna API integration for live job postings. Falls back to curated sample data with a visible "Demo Fallback" banner when no API credentials are configured. |
+| 4 | **Adaptive Interview Agent** | 9 decision types (increase difficulty, deeper follow-up, confidence recovery, verify resume claim, etc.). Full agent decision trace shown in the UI after every adaptation. |
+| 5 | **Agent Decision Trace** | Every question adaptation is fully explainable: Observation, Decision, Reason, Evidence, Next Action — all visible in the interview room. |
+| 6 | **Audio Behavioral Signals** | Optional mic recording → faster-Whisper transcription → confidence indicator, speech clarity proxy, speaking rate, and pause count. Fallback uses heuristic estimation. |
+| 7 | **Video Engagement Signals** | Optional webcam → OpenCV/MediaPipe face analysis → engagement proxy, framing, stability, motion level. Fallback uses session-length heuristics. |
+| 8 | **Explainable Feedback Report** | Interview readiness verdict (Ready / Almost Ready / Needs Practice), radar chart, per-question breakdown, skill mastery map, 7-day practice plan, personalised learning resources. |
+| 9 | **Fallback-Safe Architecture** | Every LLM call has a deterministic rule-based fallback. MongoDB, Whisper, and OpenCV are all optional. The system works fully without any API key or external service. |
+
+---
+
+## Honest AI Signal Labeling
+
+The system uses the following language to accurately describe its behavioral signals:
+
+| Signal | What it measures | What it is NOT |
+|--------|-----------------|----------------|
+| **Confidence indicator** | Whisper fluency score + pause frequency | Not psychological confidence measurement |
+| **Clarity proxy** | Speech-to-text clarity score from Whisper | Not linguistic quality assessment |
+| **Engagement proxy** | Face-presence rate and head stability from OpenCV | Not emotion detection or attention measurement |
+| **Behavioral signals** | Derived from audio/video metadata in the session | Not psychological analysis |
+
+Every report screen is labeled with its `behavioral_mode`: `audio`, `video`, `multimodal`, `audio_fallback`, `video_fallback`, or `placeholder`. Heuristic/fallback scores are visibly distinguished from real AI-derived scores.
+
+---
+
+## Architecture
+
+### 3-Stage Resume Intelligence Pipeline
+
+```
+Stage 0: Rule-Based Extraction
+  ├─ Regex patterns for skills, education, experience, projects
+  ├─ Section splitting and structure detection
+  └─ Output: raw ResumeAnalysis (always runs, never fails)
+        │
+        ▼
+Stage 1: Gemini Normalization  (skipped if USE_LLM=false)
+  ├─ Fixes fragmented projects (URL-only entries merged into parent)
+  ├─ Normalizes abbreviations (Node→Node.js, Mongo→MongoDB)
+  ├─ Expands pipe-separated stacks ("React | Node | Mongo")
+  └─ Output: improved projects + skills (falls back to Stage 0 on failure)
+        │
+        ▼
+Stage 2: Gemini Interview Intelligence  (skipped if USE_LLM=false)
+  ├─ Claims to verify (with probe questions)
+  ├─ Project deep-dive topics
+  ├─ Interview risks and strong/weak skills
+  └─ Output: intelligence fields added to ResumeAnalysis (never overwrites Stage 0/1)
+```
+
+### Role Recommendation Pipeline
+
+```
+Deterministic Scoring:
+  Core skill coverage (0-55) + Bonus coverage (0-20)
+  + Project evidence scan (0-18) + Experience affinity (-5..+6)
+  + Skill breadth bonus (0/3/6)
+  → Calibrated to 65-91 range with deterministic ±3 jitter
+
+Gemini Enrichment (Stage 3, optional):
+  role_type (realistic | stretch) + why_fit
+  + resume_evidence + gaps + what_interview_will_validate
+```
+
+### Adaptive Interview Engine
+
+```
+After each answer:
+  Technical score + Depth score + Correctness score
+  + Audio confidence indicator (if available)
+  + Video engagement proxy (if available)
+  → Multimodal aggregator → Combined candidate signal
+  → Intelligence engine selects: next_topic, next_difficulty, decision_type
+  → Decision trace recorded: Observation, Decision, Reason, Evidence, Next Action
+```
 
 ---
 
@@ -24,118 +122,70 @@
 
 | Layer | Technologies |
 |-------|-------------|
-| **Frontend** | React 18, Vite, Tailwind CSS, React Router v6, Axios, Recharts |
-| **Backend** | Python 3.11, FastAPI, Pydantic v2, Uvicorn, Motor (async MongoDB) |
-| **Database** | MongoDB 7 · automatic in-memory fallback (no setup required) |
-| **AI/LLM** | Anthropic Claude (optional) · rule-based engines always available |
-| **Audio** | faster-whisper or openai-whisper (optional, fallback always works) |
-| **Video** | OpenCV + MediaPipe (optional, fallback always works) |
+| **Frontend** | React 18, Vite, Tailwind CSS, React Router v6, Recharts |
+| **Backend** | Python 3.11, FastAPI, Pydantic v2, Uvicorn |
+| **Database** | MongoDB 7 with Motor async client · transparent in-memory fallback |
+| **LLM** | Gemini 2.0 Flash (recommended) · Anthropic Claude · Groq · xAI Grok — all optional |
+| **Audio** | faster-whisper (optional) · heuristic fallback always available |
+| **Video** | OpenCV + MediaPipe (optional) · heuristic fallback always available |
+| **Live Jobs** | Adzuna API (optional) · curated sample fallback always shown |
 | **Deploy** | Docker Compose (MongoDB + Backend + Frontend/nginx) |
-
----
-
-## Architecture Overview
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                        Browser (React + Vite)                            │
-│                                                                          │
-│  /upload → /roles/:id → /jobs/:id → /interview/:id → /report/:id        │
-│                                                                          │
-│  ┌────────────┐  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │ ResumeUpload│  │RoleRecommend│  │ InterviewRoom │  │ FeedbackReport│  │
-│  │            │  │             │  │               │  │               │  │
-│  │            │  │             │  │ AudioRecorder │  │ RadarChart    │  │
-│  │            │  │             │  │ VideoRecorder │  │ BarChart      │  │
-│  └─────┬──────┘  └──────┬──────┘  └──────┬────────┘  └───────┬───────┘  │
-└────────┼────────────────┼────────────────┼───────────────────┼──────────┘
-         │ REST/JSON       │                │                   │
-┌────────▼────────────────▼────────────────▼───────────────────▼──────────┐
-│                     FastAPI Backend (port 8000)                          │
-│                                                                          │
-│  POST /api/resume/upload         → resume_agent (parse + analyse)        │
-│  GET  /api/resume/roles/:id      → role_agent   (score + rank)           │
-│  GET  /api/jobs/:id              → job_recommender_agent                 │
-│  POST /api/interview/start       → interview_orchestrator                │
-│  POST /api/interview/evaluate    → evaluator_agent                       │
-│  POST /api/interview/next-question → interview_orchestrator (adaptive)   │
-│  POST /api/interview/final-report  → feedback_agent                      │
-│  POST /api/scoring/audio         → audio_analyzer (Whisper / fallback)   │
-│  POST /api/scoring/video         → video_analyzer (OpenCV / fallback)    │
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │ In-memory store  ←→  MongoDB 7 (motor async)                    │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
 ## Project Structure
 
 ```
-mock-interview-agent/
+MockInterview.ai/
 ├── backend/
-│   ├── main.py                     # FastAPI app + CORS + lifespan hooks
-│   ├── config.py                   # Pydantic settings (.env)
+│   ├── main.py                          # FastAPI app + CORS + lifespan
+│   ├── config.py                        # Pydantic settings (reads .env)
 │   ├── requirements.txt
-│   ├── Dockerfile
 │   ├── agents/
-│   │   ├── resume_agent.py         # PDF → structured analysis
-│   │   ├── role_agent.py           # skill → role matching
-│   │   ├── job_recommender_agent.py# skill → job scoring (50 jobs)
-│   │   ├── interview_orchestrator.py# adaptive Q selection
-│   │   ├── evaluator_agent.py      # answer scoring
-│   │   └── feedback_agent.py       # final report generation
+│   │   ├── resume_agent.py              # Stage 0+1: rule extraction + normalization
+│   │   ├── role_agent.py                # 15-role deterministic scorer
+│   │   ├── adzuna_job_fetcher.py        # Adzuna live job API client
+│   │   ├── job_recommender_agent.py     # skill → job matching
+│   │   ├── interview_orchestrator.py    # adaptive question selection + decision trace
+│   │   ├── evaluator_agent.py           # per-answer technical scoring
+│   │   └── feedback_agent.py            # final report generation
 │   ├── services/
-│   │   ├── pdf_parser.py           # PyMuPDF text extraction
-│   │   ├── audio_analyzer.py       # Whisper transcription + scoring
-│   │   └── video_analyzer.py       # OpenCV/MediaPipe face analysis
+│   │   ├── pdf_parser.py                # PyMuPDF + python-docx text extraction
+│   │   ├── llm_service.py               # enhance_analysis, build_interview_intelligence,
+│   │   │                                #   normalize_resume_extraction, enrich_roles_with_gemini
+│   │   ├── llm_client.py                # unified LLM provider (Gemini / Anthropic / Groq / Grok)
+│   │   ├── audio_analyzer.py            # Whisper transcription + behavioral signal scoring
+│   │   ├── video_analyzer.py            # OpenCV/MediaPipe engagement proxy
+│   │   └── multimodal_aggregator.py     # tech×0.45 + comm×0.20 + conf×0.15 + eng×0.10 + fit×0.10
 │   ├── models/
-│   │   ├── resume.py  analysis.py  interview.py  jobs.py
-│   │   ├── audio.py               # AudioAnalysisResponse
-│   │   └── video.py               # VideoAnalysisResponse
+│   │   ├── analysis.py                  # ResumeAnalysis, RoleMatch, ClaimToVerify, ProjectDeepDive
+│   │   ├── resume.py  interview.py  jobs.py  audio.py  video.py
 │   ├── routes/
-│   │   ├── resume_routes.py  role_routes.py  job_routes.py
+│   │   ├── resume_routes.py             # /api/resume/upload + /api/resume/analyze
 │   │   ├── interview_routes.py
-│   │   └── scoring_routes.py       # /api/scoring/audio + /api/scoring/video
-│   ├── database/
-│   │   ├── connection.py           # Motor async client + in-memory fallback
-│   │   └── store.py                # In-memory key-value store
-│   └── sample_data/
-│       └── sample_jobs.json        # 50 curated job listings
+│   │   ├── job_routes.py
+│   │   └── scoring_routes.py            # /api/scoring/audio + /api/scoring/video
+│   └── database/
+│       ├── connection.py                # Motor client + in-memory fallback
+│       └── store.py                     # In-memory key-value store
 ├── frontend/
-│   ├── Dockerfile
-│   ├── nginx.conf
-│   ├── src/
-│   │   ├── App.jsx                 # Route table
-│   │   ├── pages/
-│   │   │   ├── Home.jsx            # Landing page
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── ResumeUpload.jsx
-│   │   │   ├── RoleRecommendation.jsx
-│   │   │   ├── JobRecommendation.jsx
-│   │   │   ├── InterviewRoom.jsx
-│   │   │   └── FeedbackReport.jsx
-│   │   ├── components/
-│   │   │   ├── AudioRecorder.jsx   # Mic recording + Whisper upload
-│   │   │   ├── VideoRecorder.jsx   # Webcam preview + frame/clip upload
-│   │   │   ├── AdaptationBadge.jsx
-│   │   │   ├── ScoreCard.jsx
-│   │   │   ├── ReportSection.jsx
-│   │   │   ├── JobCard.jsx
-│   │   │   └── RoleCard.jsx
-│   │   └── services/
-│   │       ├── api.js
-│   │       ├── resumeService.js
-│   │       ├── analysisService.js
-│   │       ├── jobService.js
-│   │       └── interviewService.js  # includes analyzeAudio + analyzeVideo
+│   └── src/
+│       ├── pages/
+│       │   ├── ResumeUpload.jsx         # Upload + Resume Intelligence panel
+│       │   ├── RoleRecommendation.jsx   # Role cards with Gemini explanations
+│       │   ├── JobRecommendation.jsx    # Job cards with live/fallback banner
+│       │   ├── InterviewRoom.jsx        # Adaptive interview + Agent Trace Panel
+│       │   └── FeedbackReport.jsx       # Full multimodal report
+│       └── components/
+│           ├── AgentTracePanel.jsx      # Observation/Decision/Reason/Evidence/Next Action
+│           ├── AdaptationBadge.jsx      # Named decision type badges
+│           ├── RoleCard.jsx             # Role fit explanation + realistic/stretch badge
+│           └── JobCard.jsx              # LIVE/SAMPLE badge + application readiness
 ├── docs/
-│   ├── architecture.md
-│   └── demo_script.md
+│   ├── demo_script.md                   # Full presenter guide with sample answers
+│   └── architecture.md
 ├── sample_data/
-│   └── sample_resume.txt           # Demo resume for presentations
+│   └── sample_resume.txt                # Demo resume for presentations
 ├── .env.example
 ├── docker-compose.yml
 └── README.md
@@ -155,8 +205,9 @@ mock-interview-agent/
 
 ```bash
 git clone <repo-url>
-cd mock-interview-agent
-cp .env.example .env          # edit values as needed
+cd MockInterview.ai
+cp .env.example .env
+# Edit .env — minimum: set USE_LLM=true and add GEMINI_API_KEY for full experience
 ```
 
 ### 2. Run the backend
@@ -164,14 +215,15 @@ cp .env.example .env          # edit values as needed
 ```bash
 cd backend
 
-# Create and activate virtualenv
-python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+# Create and activate virtual environment
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS/Linux
 
-# Core dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# Optional: real audio transcription (much better than heuristic fallback)
+# Optional: real audio transcription
 pip install faster-whisper
 
 # Optional: real video face analysis
@@ -181,9 +233,9 @@ pip install opencv-python mediapipe
 uvicorn main:app --reload --port 8000
 ```
 
-- API: <http://localhost:8000>
-- Swagger docs: <http://localhost:8000/docs>
-- Health check: <http://localhost:8000/api/health>
+- API: http://localhost:8000
+- Swagger docs: http://localhost:8000/docs
+- Health check: http://localhost:8000/api/health
 
 ### 3. Run the frontend
 
@@ -193,41 +245,162 @@ npm install
 npm run dev
 ```
 
-App: <http://localhost:5173>
-
----
-
-## Running with Docker Compose
-
-```bash
-cp .env.example .env
-docker compose up --build
-```
-
-| Service  | URL |
-|----------|-----|
-| Frontend (nginx) | <http://localhost:5173> |
-| Backend (FastAPI) | <http://localhost:8000> |
-| MongoDB | localhost:27017 |
+App: http://localhost:5173
 
 ---
 
 ## Environment Variables
 
-All variables live in `.env` (copy from `.env.example`):
+Copy `.env.example` to `.env` and configure:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MONGODB_URL` | `mongodb://localhost:27017` | MongoDB connection string |
-| `MONGODB_DB_NAME` | `mock_interview_db` | Database name |
-| `FRONTEND_URL` | `http://localhost:5173` | Allowed CORS origin |
-| `USE_LLM` | `false` | Enable Claude LLM for richer responses |
-| `ANTHROPIC_API_KEY` | *(empty)* | Required only when `USE_LLM=true` |
-| `VITE_API_BASE_URL` | `http://localhost:8000` | Backend URL seen by the browser |
+```bash
+# ── Database (optional — falls back to in-memory) ────────────────────────────
+MONGODB_URL=mongodb://localhost:27017
+MONGODB_DB_NAME=mock_interview_db
 
-> **MongoDB is optional.** If `MONGODB_URL` is unreachable the app silently switches to an in-memory store. All features work; data is lost on server restart.
+# ── Frontend origin (for CORS) ────────────────────────────────────────────────
+FRONTEND_URL=http://localhost:5173
 
-> **LLM is optional.** Every agent has a rule-based fallback that produces high-quality outputs without an API key.
+# ── LLM (optional — full rule-based fallback if disabled) ─────────────────────
+USE_LLM=false                         # set true to enable Gemini-powered features
+LLM_PROVIDER=gemini                   # gemini | anthropic | groq | grok
+
+# Gemini (recommended — best performance for resume intelligence)
+GEMINI_API_KEY=                       # console.cloud.google.com → Gemini API
+GEMINI_MODEL=gemini-2.0-flash
+
+# Anthropic Claude (alternative)
+ANTHROPIC_API_KEY=                    # console.anthropic.com
+
+# Groq (free tier, fast)
+GROQ_API_KEY=                         # console.groq.com
+GROQ_MODEL=mixtral-8x7b-32768
+
+# xAI Grok (alternative)
+GROK_API_KEY=                         # console.x.ai
+GROK_MODEL=grok-3
+
+# ── Live Jobs (optional — sample fallback if not configured) ───────────────────
+ADZUNA_APP_ID=                        # developer.adzuna.com
+ADZUNA_APP_KEY=
+
+# ── Frontend (Vite) ──────────────────────────────────────────────────────────
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+### Enabling Gemini (Recommended)
+
+1. Go to https://console.cloud.google.com → APIs & Services → Enable "Generative Language API"
+2. Create an API key under "Credentials"
+3. In `.env`:
+   ```
+   USE_LLM=true
+   LLM_PROVIDER=gemini
+   GEMINI_API_KEY=your-key-here
+   ```
+
+Gemini powers: resume normalization, interview intelligence (claims/risks/probes), role enrichment (why_fit, evidence, gaps), and answer quality enhancement.
+
+### Enabling Live Jobs (Optional)
+
+1. Register at https://developer.adzuna.com/
+2. Create an app to get `App ID` and `App Key`
+3. In `.env`:
+   ```
+   ADZUNA_APP_ID=your-id
+   ADZUNA_APP_KEY=your-key
+   ```
+
+Without Adzuna credentials, job cards are labeled "SAMPLE" and a visible "Demo Fallback Data" banner is shown.
+
+---
+
+## Docker Compose
+
+```bash
+cp .env.example .env     # add your API keys
+docker compose up --build
+```
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:5173 |
+| Backend | http://localhost:8000 |
+| MongoDB | localhost:27017 |
+
+---
+
+## Scoring Reference
+
+### Technical scoring (per answer)
+
+| Score | What it measures |
+|-------|-----------------|
+| `technical_score` | Factual correctness of the answer |
+| `depth_score` | Depth, nuance, and trade-off reasoning |
+| `correctness_score` | Structure, relevance, and completeness |
+
+### Behavioral signals (final report)
+
+| Signal | Source | What it is |
+|--------|--------|-----------|
+| `communication_score` | Whisper clarity rating if recorded; word-count proxy otherwise | Speech clarity indicator — not linguistic quality assessment |
+| `confidence_score` | Whisper fluency + pause analysis if recorded; score trajectory otherwise | Confidence indicator — not psychological confidence measurement |
+| `engagement_score` | Face-presence rate from OpenCV if camera used; session length otherwise | Engagement proxy — not attention or emotion measurement |
+
+The `behavioral_mode` field in the report tells you exactly which signals are real vs estimated:
+- `multimodal` — both Whisper audio and OpenCV video used
+- `audio` / `audio_fallback` — Whisper used / heuristic audio used
+- `video` / `video_fallback` — OpenCV used / heuristic video used
+- `placeholder` — all behavioral scores are text-derived proxies
+
+### Overall score formula
+
+```
+overall = technical×0.45 + communication×0.20 + confidence×0.15
+        + engagement×0.10 + role_fit×0.10
+```
+
+---
+
+## Verification Checklist
+
+Run through this before a demo:
+
+```
+Backend
+  [ ] uvicorn main:app --reload --port 8000  → starts without errors
+  [ ] curl http://localhost:8000/api/health   → {"status": "ok"}
+  [ ] Backend logs show "Using in-memory store" OR MongoDB connected
+
+Frontend
+  [ ] npm run dev  → starts at http://localhost:5173
+  [ ] npm run build → completes with 0 errors
+
+LLM (if enabled)
+  [ ] USE_LLM=true in .env
+  [ ] At least one API key configured (GEMINI_API_KEY recommended)
+  [ ] Backend logs show "LLM normalization OK" / "LLM intelligence stage OK" after analyze
+
+Fallback (works without any API key)
+  [ ] Upload sample_data/sample_resume.txt with USE_LLM=false
+  [ ] Analysis panel shows skills, projects, strengths
+  [ ] Role recommendations appear (rule-based scores)
+  [ ] Interview starts and evaluates an answer
+
+Full flow
+  [ ] Upload resume → analysis panel appears with skills + projects
+  [ ] If USE_LLM=true → "Interview Intelligence" section visible with claims to verify
+  [ ] Role recommendations page shows role cards with match scores
+  [ ] If USE_LLM=true → "Why this role?" box and Realistic/Stretch badge visible
+  [ ] Job recommendations page shows job cards
+  [ ] LIVE badge with green pulse if Adzuna configured; SAMPLE badge otherwise
+  [ ] Start interview → first question appears
+  [ ] Submit answer → evaluation panel scores appear
+  [ ] Click Next Question → AdaptationBadge shows decision type label
+  [ ] Agent Trace Panel shows Observation / Decision / Reason / Evidence / Next Action
+  [ ] Generate Final Report → readiness verdict + radar chart + per-question breakdown
+```
 
 ---
 
@@ -237,147 +410,51 @@ All variables live in `.env` (copy from `.env.example`):
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/resume/upload` | Upload PDF/TXT; returns `candidate_id` + extracted text |
-| `POST` | `/api/resume/analyse` | Run AI analysis on extracted text; returns skills, experience, projects |
-| `GET`  | `/api/resume/roles/:id` | Role recommendations ranked by match score |
+| `POST` | `/api/resume/upload` | Upload PDF/DOCX/TXT → `candidate_id` + raw text |
+| `POST` | `/api/resume/analyze` | 3-stage analysis → skills, projects, intelligence fields |
+| `GET`  | `/api/resume/roles/{id}` | Gemini-enriched role recommendations |
 
 ### Jobs
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/api/jobs/:id` | Top-10 job matches from 50-listing database |
+| `GET`  | `/api/jobs/{id}` | Live (Adzuna) or sample jobs ranked by skill match |
 
 ### Interview
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/interview/start` | Begin session; returns first question |
-| `GET`  | `/api/interview/:id` | Load existing session |
-| `POST` | `/api/interview/evaluate-answer` | Score an answer (technical / depth / correctness) |
-| `POST` | `/api/interview/next-question` | Adaptive next question with reason |
-| `POST` | `/api/interview/final-report` | Generate full feedback report |
+| `POST` | `/api/interview/start` | Create session → first question |
+| `GET`  | `/api/interview/{id}` | Load existing session |
+| `POST` | `/api/interview/evaluate-answer` | Score answer; returns technical/depth/correctness |
+| `POST` | `/api/interview/next-question` | Adaptive next question + decision trace |
+| `POST` | `/api/interview/final-report` | Full multimodal report |
 
-### Scoring (Audio & Video)
+### Scoring
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/scoring/audio` | Upload audio blob → transcript + confidence + clarity + pace + pauses |
-| `POST` | `/api/scoring/video` | Upload image/clip → engagement + eye-contact + posture + stress |
-
-Both scoring endpoints accept optional `session_id` and `question_number` form fields to persist results on the session so the final report includes them.
-
----
-
-## Demo Flow
-
-1. Open <http://localhost:5173>
-2. Click **Start Practicing** → **Upload Resume**
-3. Upload `sample_data/sample_resume.txt` (or your own PDF)
-4. Click **Analyse Resume** → see parsed skills, experience, projects
-5. Click **View Recommended Roles** → see ranked roles
-6. Click **View Recommended Jobs** → see top job matches
-7. On a role card click **Start Mock Interview**
-8. Answer the first question (type *or* record audio/enable webcam)
-9. Submit → see scores + feedback → click **Next Question**
-10. See adaptation badge explaining *why* the difficulty changed
-11. After 3+ questions click **Generate Final Report**
-12. Explore radar chart, bar chart, learning plan, per-question breakdown
-
----
-
-## Scoring Approach
-
-### Technical score (per answer)
-```
-technical_score  (0-100)  — factual correctness
-depth_score      (0-100)  — depth and nuance
-correctness_score(0-100)  — structure and relevance
-```
-
-### Behavioral scores (final report)
-```
-communication_score  — audio clarity if recorded, else word-count proxy
-confidence_score     — audio fluency/pauses if recorded, else score trajectory
-engagement_score     — face-presence rate if camera used, else session length
-```
-`behavioral_mode` in the report indicates source: `"audio"` | `"video"` | `"multimodal"` | `"audio_fallback"` | `"video_fallback"` | `"placeholder"`
-
-### Overall score formula
-```
-overall = technical×0.45 + communication×0.20 + confidence×0.15
-        + engagement×0.10 + role_fit×0.10
-```
+| `POST` | `/api/scoring/audio` | Audio blob → transcript + behavioral signals |
+| `POST` | `/api/scoring/video` | Image/clip → engagement proxy + framing |
 
 ---
 
 ## Limitations
 
-- **Audio fallback**: Without `faster-whisper` installed, audio scores are estimated from file size. Install `pip install faster-whisper` for real Whisper transcription.
-- **Video fallback**: Without `opencv-python`, video scores are heuristic. Install `pip install opencv-python mediapipe` for real face detection.
-- **No persistent auth**: `candidate_id` is stored in `localStorage`. Multi-device/session continuity requires MongoDB.
-- **Behavioral scores**: Even with audio/video, these are proxies — not replacements for human observation.
-- **50 job listings**: The job database is curated sample data, not a live job board.
-- **In-memory storage**: Data is lost on backend restart unless MongoDB is configured.
+- **Audio behavioral signals**: Without `faster-whisper`, confidence and clarity are estimated from file size and duration — not from real speech analysis. Install `pip install faster-whisper` for Whisper-derived signals.
+- **Video engagement proxy**: Without `opencv-python`, engagement is estimated from session length. Install `pip install opencv-python mediapipe` for face-detection-derived signals.
+- **Gemini intelligence**: All intelligence features (claims, risks, role enrichment) require `USE_LLM=true` and a configured API key. Rule-based outputs are always available without it.
+- **In-memory storage**: Session data is lost on backend restart unless MongoDB is configured.
+- **No persistent auth**: `candidate_id` is stored in `localStorage`. Multiple devices require MongoDB.
+- **Sample jobs**: Without Adzuna credentials, job listings are curated demo data, not live postings.
 
 ---
 
-## Future Improvements
+## Adding a New Interview Role
 
-- [ ] Real-time voice-to-text during typing (Web Speech API integration)
-- [ ] Live video proctoring with per-frame emotion detection
-- [ ] Multi-turn conversation memory across sessions
-- [ ] User accounts and progress tracking dashboard
-- [ ] Live job board integration (LinkedIn / Indeed API)
-- [ ] Company-specific question banks
-- [ ] Peer comparison analytics
-- [ ] Mobile-responsive interview room
-- [ ] Export report as PDF
+1. Add role definition to `backend/agents/role_agent.py` (`_ROLES` list) — core skills, bonus skills, project signals, next_skills, focus_areas, probing, level_affinities
+2. Add title mapping to `frontend/src/components/JobCard.jsx` (`mapToInterviewRole`)
 
 ---
 
-## Hackathon Completion Notes
-
-- Dynamic question generation now uses `services/question_generator.py`. It uses an LLM when configured and otherwise returns deterministic, resume-aware questions labelled `deterministic_dynamic`.
-- The central intelligence engine drives next-topic and next-difficulty decisions. Decision traces include technical score, depth, communication clarity, confidence, pause/hesitation, video engagement, stress proxy, combined multimodal score, topic rationale, and difficulty rationale.
-- Multimodal aggregation is implemented in `services/multimodal_aggregator.py` with weights: technical 45%, communication 20%, confidence 15%, engagement 10%, role fit 10%.
-- Audio/video fallback modes are visibly labelled as heuristic/proxy-based and are not claimed as true emotion, gaze, or posture classifiers.
-- Job recommendations use live Adzuna postings when credentials are configured. Without live credentials, the UI marks recommendations as sample/fallback jobs.
-- Sample expected outputs live in `sample_data/expected_*.json` and `sample_data/expected_final_report.md`.
-
-### Test Commands
-
-```bash
-cd backend
-python -m pytest tests
-
-cd ../frontend
-npm run build
-```
-
-## Development Notes
-
-### Adding a new interview role
-
-1. Add role entry to `backend/agents/role_agent.py` (`_ROLE_QUESTION_BANKS`)
-2. Add role mapping to `frontend/src/components/JobCard.jsx` (`mapToInterviewRole`)
-
-### Enabling LLM mode
-
-```bash
-# .env
-USE_LLM=true
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-All agents will use `claude-sonnet-4-6` for richer outputs. Rule-based fallbacks remain for resilience.
-
-### Running tests
-
-```bash
-cd backend
-pytest                        # (test suite to be added)
-```
-
----
-
-*Built with ❤️ as a hackathon project demonstrating agentic AI in real-world interview preparation.*
+*Built for hackathon demonstration of agentic AI in interview preparation.*

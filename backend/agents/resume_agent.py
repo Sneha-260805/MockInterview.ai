@@ -9,10 +9,13 @@ lines are correctly grouped under their parent project / role / certification.
 """
 
 import re
+import logging
 from typing import Optional
 from models.analysis import (
     ResumeAnalysis, Project, Certification, WorkExperience,
 )
+
+logger = logging.getLogger(__name__)
 
 # ── Skill registry (unchanged) ────────────────────────────────────────────────
 
@@ -55,6 +58,50 @@ _SKILL_LIST = [
 ]
 
 _SKILLS_MAP: dict[str, str] = {s.lower(): s for s in _SKILL_LIST}
+
+# ── Common skill abbreviations → canonical form ───────────────────────────────
+# Used by the normalization stage to fix abbreviations returned by the LLM
+# or missed by the regex scanner.
+
+_SKILL_ABBREV: dict[str, str] = {
+    "node":          "Node.js",
+    "nodejs":        "Node.js",
+    "node js":       "Node.js",
+    "mongo":         "MongoDB",
+    "mongodb":       "MongoDB",
+    "mongo db":      "MongoDB",
+    "js":            "JavaScript",
+    "ts":            "TypeScript",
+    "postgres":      "PostgreSQL",
+    "postgresql":    "PostgreSQL",
+    "psql":          "PostgreSQL",
+    "react.js":      "React",
+    "reactjs":       "React",
+    "next":          "Next.js",
+    "nextjs":        "Next.js",
+    "vue":           "Vue.js",
+    "vuejs":         "Vue.js",
+    "express":       "Express.js",
+    "expressjs":     "Express.js",
+    "angularjs":     "Angular",
+    "k8s":           "Kubernetes",
+    "tf":            "TensorFlow",
+    "sklearn":       "Scikit-learn",
+    "scikit learn":  "Scikit-learn",
+    "sk-learn":      "Scikit-learn",
+    "tailwind":      "Tailwind CSS",
+    "gql":           "GraphQL",
+    "restful":       "REST API",
+    "rest":          "REST API",
+    "py":            "Python",
+    "ml":            "Machine Learning",
+    "dl":            "Deep Learning",
+    "react native":  "React Native",
+    "react-native":  "React Native",
+    "github":        "GitHub",
+    "git hub":       "GitHub",
+    "docker compose": "Docker",
+}
 
 
 # ── Section aliases ────────────────────────────────────────────────────────────
@@ -1148,3 +1195,181 @@ def analyze(raw_text: str, candidate_id: str) -> ResumeAnalysis:
         achievements=achievements,
         work_experience=work_exp,
     )
+
+
+# ── Normalization helpers (used by analyze_with_normalization) ─────────────────
+
+def _normalize_skill(raw: str) -> str:
+    """
+    Map a raw skill token to its canonical form.
+    Priority: abbreviation table → skills map → original string.
+    """
+    s = raw.strip()
+    if not s:
+        return s
+    s_lower = s.lower()
+    # 1. Explicit abbreviation table
+    if s_lower in _SKILL_ABBREV:
+        return _SKILL_ABBREV[s_lower]
+    # 2. Main skills map (already-canonical strings like "Node.js")
+    if s_lower in _SKILLS_MAP:
+        return _SKILLS_MAP[s_lower]
+    return s
+
+
+def _merge_normalized_skills(llm_skills: list[str], original_skills: list[str]) -> list[str]:
+    """
+    Merge Gemini-normalized skills with rule-extracted skills.
+    Normalizes each to its canonical form, deduplicates, preserves order
+    (LLM skills first so any normalization takes precedence).
+    """
+    seen_lower: set[str] = set()
+    merged: list[str] = []
+    for raw in llm_skills + original_skills:
+        canonical = _normalize_skill(raw)
+        if not canonical or len(canonical) < 2:
+            continue
+        if canonical.lower() not in seen_lower:
+            seen_lower.add(canonical.lower())
+            merged.append(canonical)
+    return merged[:35]
+
+
+def _convert_normalized_projects(raw_projects: list[dict]) -> list[Project]:
+    """
+    Convert plain dicts from the Gemini normalization stage into Project objects.
+    Applies skill-map normalization to each technology name.
+    """
+    result: list[Project] = []
+    for p in raw_projects:
+        name = str(p.get("name", "")).strip()
+        if not name or len(name) < 2:
+            continue
+
+        desc = p.get("description", [])
+        if isinstance(desc, str):
+            desc = [desc]
+        desc = [str(d).strip() for d in desc if str(d).strip()][:6]
+
+        raw_techs = p.get("technologies", [])
+        if isinstance(raw_techs, str):
+            raw_techs = [t.strip() for t in re.split(r"[,|/]", raw_techs)]
+        techs = [_normalize_skill(t) for t in raw_techs if str(t).strip()]
+        # De-duplicate techs while preserving order
+        seen: set[str] = set()
+        unique_techs: list[str] = []
+        for t in techs:
+            if t.lower() not in seen:
+                seen.add(t.lower())
+                unique_techs.append(t)
+        techs = unique_techs[:8]
+
+        github_url = str(p.get("github_url", "")).strip() or None
+        duration   = str(p.get("duration", "")).strip() or None
+        summary    = " ".join(desc[:3])[:300] if desc else "No description available."
+
+        result.append(Project(
+            name=name,
+            technologies=techs,
+            summary=summary,
+            duration=duration,
+            description=desc,
+            github_url=github_url,
+        ))
+    return result[:6]
+
+
+# ── Public async entry-point (rule-based + Gemini normalization) ──────────────
+
+async def analyze_with_normalization(raw_text: str, candidate_id: str) -> ResumeAnalysis:
+    """
+    Hybrid extraction:
+      Stage 1 — deterministic rule-based extraction via analyze()
+      Stage 2 — optional Gemini cleanup (project fragmentation fix, skill normalization)
+
+    Falls back to pure Stage 1 output silently if:
+    - USE_LLM=false
+    - No API key configured
+    - Gemini call fails or returns bad JSON
+    - Model validation of normalized data fails
+
+    Only projects and skills are improved by the normalization stage.
+    All other fields (education, certifications, work experience, etc.) are
+    produced entirely by the rule-based extractor and are never changed.
+    """
+    # Stage 1: always runs, always succeeds
+    result = analyze(raw_text, candidate_id)
+
+    try:
+        from services.llm_service import normalize_resume_extraction
+
+        # Pass only the fields Gemini needs — omit complex sub-objects like domain
+        simplified_projects = [
+            {
+                "name":         p.name,
+                "description":  p.description[:3],
+                "technologies": p.technologies,
+                "duration":     p.duration or "",
+                "summary":      p.summary[:150],
+            }
+            for p in result.projects
+        ]
+
+        # Re-parse sections to get raw text for each relevant section
+        sections = _parse_sections(_split_inline_section_header(raw_text))
+        raw_projects_text = sections.get("projects", "")
+        raw_skills_text   = sections.get("skills", "")
+
+        normalized = await normalize_resume_extraction(
+            projects=simplified_projects,
+            skills=result.skills,
+            raw_projects_text=raw_projects_text,
+            raw_skills_text=raw_skills_text,
+        )
+
+        if not normalized:
+            return result
+
+        improved_projects = _convert_normalized_projects(normalized.get("projects", []))
+        improved_skills   = _merge_normalized_skills(
+            normalized.get("skills", []), result.skills
+        )
+
+        # Only apply if normalization actually changed something meaningful
+        projects_changed = bool(improved_projects)
+        skills_changed   = set(improved_skills) != set(result.skills)
+
+        if not projects_changed and not skills_changed:
+            return result
+
+        final_projects = improved_projects if projects_changed else result.projects
+        final_skills   = improved_skills   if skills_changed   else result.skills
+
+        # Re-derive fields that depend on projects / skills
+        new_domains   = _infer_domains(final_skills, result.certifications, final_projects)
+        new_strengths = _infer_strengths(
+            final_skills, final_projects, result.experience_level,
+            result.certifications, result.work_experience,
+        )
+        new_weak_areas = _infer_weak_areas(final_skills, new_domains)
+
+        logger.info(
+            "Normalization applied: projects %d→%d, skills %d→%d",
+            len(result.projects), len(final_projects),
+            len(result.skills),   len(final_skills),
+        )
+
+        return result.model_copy(update={
+            "projects":   final_projects,
+            "skills":     final_skills,
+            "domains":    new_domains,
+            "strengths":  new_strengths,
+            "weak_areas": new_weak_areas,
+        })
+
+    except Exception as exc:
+        logger.warning(
+            "Normalization stage failed, using rule-based output: %s: %s",
+            type(exc).__name__, exc,
+        )
+        return result

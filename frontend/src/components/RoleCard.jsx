@@ -30,6 +30,21 @@ function ScoreRing({ score }) {
   );
 }
 
+// ── Role type badge ───────────────────────────────────────────────────────────
+function RoleTypeBadge({ roleType }) {
+  if (!roleType) return null;
+  const isRealistic = roleType === "realistic";
+  return (
+    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+      isRealistic
+        ? "bg-green-100 text-green-700 border-green-200"
+        : "bg-amber-100 text-amber-700 border-amber-200"
+    }`}>
+      {isRealistic ? "✓ Realistic Fit" : "↗ Stretch Opportunity"}
+    </span>
+  );
+}
+
 // ── Rank badge ────────────────────────────────────────────────────────────────
 function RankBadge({ rank }) {
   if (!rank || rank > 3) return null;
@@ -140,9 +155,11 @@ export default function RoleCard({ role, candidateId }) {
     >
       {/* ── Header ── */}
       <div>
-        {role.rank && role.rank <= 3 && (
-          <div className="mb-2">
-            <RankBadge rank={role.rank} />
+        {/* Rank + role type badges */}
+        {(role.rank <= 3 || role.role_type) && (
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            {role.rank && role.rank <= 3 && <RankBadge rank={role.rank} />}
+            {role.role_type && <RoleTypeBadge roleType={role.role_type} />}
           </div>
         )}
         <div className="flex items-start gap-4">
@@ -154,13 +171,28 @@ export default function RoleCard({ role, candidateId }) {
         </div>
       </div>
 
-      {/* ── Evidence: Why This Role Fits ── */}
-      {role.evidence?.length > 0 && (
+      {/* ── Why this role? (Gemini explanation) ── */}
+      {role.why_fit && role.why_fit !== role.reason && (
+        <div className="border-t border-gray-100 pt-3">
+          <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-2">
+            Why this role?
+          </p>
+          <div className="flex items-start gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3.5 py-3">
+            <svg className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            <p className="text-sm text-indigo-800 leading-relaxed">{role.why_fit}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Resume Evidence ── */}
+      {(role.resume_evidence?.length > 0 || role.evidence?.length > 0) && (
         <div className="border-t border-gray-100 pt-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Why This Role Fits
+            Resume Evidence
           </p>
-          <EvidenceList items={role.evidence} />
+          <EvidenceList items={role.resume_evidence?.length > 0 ? role.resume_evidence : role.evidence} />
         </div>
       )}
 
@@ -190,12 +222,12 @@ export default function RoleCard({ role, candidateId }) {
         </div>
       )}
 
-      {/* ── Gap analysis (reduced_by) ── */}
-      {role.reduced_by?.length > 0 && (
+      {/* ── Skills Gaps (Gemini gaps, else rule-based reduced_by) ── */}
+      {(role.gaps?.length > 0 || role.reduced_by?.length > 0) && (
         <div className="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3">
-          <p className="text-xs font-semibold text-orange-700 mb-1.5">Gap Analysis</p>
+          <p className="text-xs font-semibold text-orange-700 mb-1.5">Skills Gaps</p>
           <ul className="space-y-1">
-            {role.reduced_by.map((item, i) => (
+            {(role.gaps?.length > 0 ? role.gaps : role.reduced_by).map((item, i) => (
               <li key={i} className="text-xs text-orange-800 flex items-start gap-1.5">
                 <svg className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -207,16 +239,30 @@ export default function RoleCard({ role, candidateId }) {
         </div>
       )}
 
-      {/* ── Interview prep (collapsible) ── */}
+      {/* ── Interview prep ── */}
       <div className="border-t border-gray-100 pt-3 space-y-3">
-        <Collapsible label="Interview Focus Areas" defaultOpen={isTop}>
+        <Collapsible label="Interview Focus" defaultOpen={isTop}>
           <div className="flex flex-wrap gap-2">
-            {role.focus_areas.map((item) => (
+            {(role.interview_focus_areas?.length > 0 ? role.interview_focus_areas : role.focus_areas).map((item) => (
               <Chip key={item} text={item} variant="blue" />
             ))}
           </div>
         </Collapsible>
-        <Collapsible label="Areas to Probe in Interview">
+        {role.what_interview_will_validate?.length > 0 && (
+          <Collapsible label="What Interview Will Validate" defaultOpen={isTop}>
+            <ul className="space-y-1.5">
+              {role.what_interview_will_validate.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-gray-700">
+                  <svg className="w-3 h-3 text-indigo-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </Collapsible>
+        )}
+        <Collapsible label="Areas to Probe">
           <div className="flex flex-wrap gap-2">
             {role.weak_areas_to_probe.map((item) => (
               <Chip key={item} text={item} variant="orange" />

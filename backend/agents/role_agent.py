@@ -323,6 +323,73 @@ _ROLES = [
         "focus_areas": ["Threat modeling & risk assessment", "Secure SDLC practices", "Identity & access management"],
         "probing": ["Zero-trust architecture design", "Incident response playbooks", "Secure API design patterns"],
     },
+    {
+        "role": "Software Engineer",
+        "core":  ["python", "javascript", "git", "sql", "rest api"],
+        "bonus": ["docker", "linux", "typescript", "postgresql", "mongodb",
+                  "aws", "ci/cd", "java", "go", "bash", "redis", "agile"],
+        "project_signals": [
+            "software", "application", "service", "backend", "api", "system",
+            "module", "library", "tool", "automation", "integration",
+            "algorithm", "script", "utility", "feature", "component", "pipeline",
+        ],
+        "next_skills": [
+            "System design & distributed systems",
+            "Advanced SQL & query optimization",
+            "CI/CD pipeline setup (GitHub Actions / Jenkins)",
+            "Containerization deep-dive (Docker + Kubernetes)",
+            "Contributing to open-source projects",
+        ],
+        "level_affinities": {"junior": 2, "mid": 3, "senior": 2},
+        "focus_areas": ["Clean code & software design principles", "API design & integrations", "Testing & code quality"],
+        "probing": ["System design choices", "Code review approach", "Trade-off decision making"],
+    },
+    {
+        "role": "Data Analyst",
+        "core":  ["sql", "python", "pandas", "excel"],
+        "bonus": ["tableau", "power bi", "matplotlib", "seaborn", "numpy",
+                  "postgresql", "mysql", "spark", "looker",
+                  "r", "statistics", "data visualization", "jupyter"],
+        "project_signals": [
+            "analysis", "dashboard", "report", "visualization", "insight",
+            "dataset", "analytics", "metric", "kpi", "trend", "chart",
+            "data cleaning", "excel", "tableau", "business",
+            "query", "aggregation", "etl", "exploratory",
+        ],
+        "next_skills": [
+            "Business intelligence tools (Tableau / Power BI)",
+            "Advanced SQL (window functions, CTEs)",
+            "Python data pipeline automation",
+            "Statistical modeling & A/B testing",
+            "Cloud data warehouses (BigQuery / Snowflake)",
+        ],
+        "level_affinities": {"junior": 3, "mid": 2, "senior": 0},
+        "focus_areas": ["SQL query design & optimization", "Data visualization & storytelling", "Business insight extraction"],
+        "probing": ["Data cleaning & wrangling approach", "Dashboard design decisions", "Communicating insights to non-technical stakeholders"],
+    },
+    {
+        "role": "SRE / Site Reliability Engineer",
+        "core":  ["linux", "python", "docker", "kubernetes", "prometheus"],
+        "bonus": ["aws", "gcp", "azure", "terraform", "ansible", "bash",
+                  "grafana", "ci/cd", "git", "nginx", "jenkins",
+                  "redis", "postgresql", "datadog"],
+        "project_signals": [
+            "reliability", "monitoring", "observability", "alert", "incident",
+            "deployment", "infrastructure", "devops", "automation", "pipeline",
+            "uptime", "slo", "sre", "kubernetes", "helm",
+            "terraform", "prometheus", "grafana", "scale", "availability",
+        ],
+        "next_skills": [
+            "SLO/SLI/error budget definition",
+            "Chaos engineering (Chaos Monkey / Gremlin)",
+            "Infrastructure-as-code (Terraform / Pulumi)",
+            "Distributed tracing (OpenTelemetry / Jaeger)",
+            "Incident management runbooks",
+        ],
+        "level_affinities": {"junior": -4, "mid": 2, "senior": 6},
+        "focus_areas": ["System reliability & SLO design", "Observability & incident response", "Infrastructure automation"],
+        "probing": ["On-call experience & incident post-mortems", "Capacity planning approach", "IaC tooling depth"],
+    },
 ]
 
 
@@ -641,6 +708,11 @@ def recommend(analysis: ResumeAnalysis) -> RoleRecommendationResponse:
             boosted_by=boosted,
             reduced_by=reduced,
             missing_skills=missing,
+            role_type="realistic" if score >= 78 else "stretch",
+            why_fit=reason,
+            resume_evidence=evidence,
+            gaps=(reduced + missing[:2])[:4],
+            what_interview_will_validate=rd["probing"][:3],
         ))
 
     scored.sort(key=lambda r: r.match_score, reverse=True)
@@ -669,6 +741,11 @@ def recommend(analysis: ResumeAnalysis) -> RoleRecommendationResponse:
             reduced_by=["No dominant technical domain cluster found"],
             missing_skills=["Choose a specialisation: frontend, backend, data, or ML/AI"],
             rank=1,
+            role_type="stretch",
+            why_fit="General software development aptitude detected. Focusing on a specialisation would unlock more precise role recommendations.",
+            resume_evidence=["Technical background present"],
+            gaps=["No dominant technical domain cluster found", "Choose a specialisation: frontend, backend, data, or ML/AI"],
+            what_interview_will_validate=["System design basics", "Testing strategy", "Cloud platform awareness"],
         ))
     if len(scored) == 1:
         scored.append(RoleMatch(
@@ -688,6 +765,11 @@ def recommend(analysis: ResumeAnalysis) -> RoleRecommendationResponse:
             reduced_by=[],
             missing_skills=["Scripting automation (Python / Bash)", "ITIL / SRE fundamentals", "Monitoring tools (Datadog / PagerDuty)"],
             rank=2,
+            role_type="stretch",
+            why_fit="Technical background is well-suited for debugging, documentation, and customer-facing engineering support roles.",
+            resume_evidence=["Technical aptitude inferred from resume"],
+            gaps=["Scripting automation (Python / Bash)", "ITIL / SRE fundamentals"],
+            what_interview_will_validate=["Automation scripting", "Network fundamentals", "Cloud service basics"],
         ))
 
     return RoleRecommendationResponse(
