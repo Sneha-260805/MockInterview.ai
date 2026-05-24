@@ -235,6 +235,9 @@ function LevelBadge({ level }) {
 }
 
 function AnalysisPanel({ analysis, roles }) {
+  const hasAiStrongSkills = analysis.strong_skills?.length > 0;
+  const hasAiWeakAreas = analysis.weak_or_missing_areas?.length > 0;
+
   return (
     <div className="border border-indigo-100 rounded-2xl overflow-hidden bg-white shadow-sm">
       {/* Header */}
@@ -380,7 +383,7 @@ function AnalysisPanel({ analysis, roles }) {
         )}
 
         {/* Strengths */}
-        {analysis.strengths?.length > 0 && (
+        {!hasAiStrongSkills && analysis.strengths?.length > 0 && (
           <Section title="Strengths">
             <ul className="space-y-1.5">
               {analysis.strengths.map((s) => (
@@ -393,7 +396,7 @@ function AnalysisPanel({ analysis, roles }) {
         )}
 
         {/* Weak areas */}
-        {analysis.weak_areas?.length > 0 && (
+        {!hasAiWeakAreas && analysis.weak_areas?.length > 0 && (
           <Section title="Areas to Develop">
             <ul className="space-y-1.5">
               {analysis.weak_areas.map((w) => (
