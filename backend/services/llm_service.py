@@ -295,9 +295,14 @@ async def normalize_resume_extraction(
             )
             return None
 
+        # Pass the raw resume text so _parse_normalized_skills can verify
+        # that any new skill Gemini returns actually appears in the source text.
+        evidence_text = raw_skills_text + " " + raw_projects_text
         result = {
             "projects": _parse_normalized_projects(data.get("projects", [])),
-            "skills":   _parse_normalized_skills(data.get("skills", []), skills),
+            "skills":   _parse_normalized_skills(
+                data.get("skills", []), skills, raw_text=evidence_text
+            ),
         }
         logger.info(
             "LLM normalization OK: %d projects, %d skills",
@@ -333,7 +338,18 @@ def _build_normalization_prompt(
         "7. Expand slash/pipe-separated tech stacks: "
         "'React | Node | Mongo' → ['React', 'Node.js', 'MongoDB'].\n"
         "8. Do NOT duplicate projects. If unsure whether two entries are the same "
-        "project, merge them.\n\n"
+        "project, merge them.\n"
+        "9. STRICTLY PROHIBITED — never add technologies or skills unless the exact "
+        "word(s) appear verbatim in the raw input texts provided below:\n"
+        "   • HTML, CSS — do NOT infer from Streamlit, Dash, Gradio, Bokeh, or any "
+        "Python data-visualisation or dashboard library.\n"
+        "   • React, Vue, Angular, Next.js, or any other frontend JavaScript framework "
+        "— do NOT infer from Python web projects.\n"
+        "   • JavaScript or TypeScript — only include if the exact words 'JavaScript' "
+        "or 'TypeScript' (or 'JS'/'TS') appear in the raw text.\n"
+        "   • Any technology not literally present in the input texts.\n"
+        "10. Streamlit / Gradio / Plotly Dash / Bokeh are Python data-science tools. "
+        "Never infer HTML, CSS, JavaScript, React, or any frontend framework from them.\n\n"
         f"EXTRACTED PROJECTS (may contain fragments or URL-only entries):\n"
         f"{projects_json}\n\n"
         f"RAW PROJECTS SECTION (source of truth for merging):\n"
@@ -396,16 +412,67 @@ def _parse_normalized_projects(raw: list) -> list[dict]:
     return result[:6]
 
 
-def _parse_normalized_skills(raw: list, original: list[str]) -> list[str]:
-    """Return LLM-returned skill strings, falling back to original on bad output."""
+def _parse_normalized_skills(
+    raw: list,
+    original: list[str],
+    raw_text: str = "",
+) -> list[str]:
+    """
+    Evidence-based filter for LLM-returned skills.
+
+    Accepts a skill from Gemini ONLY when at least one of these holds:
+      (a) It already appears in the rule-based original extraction (case-insensitive).
+      (b) It is a canonical normalization of an original skill — e.g. Gemini returns
+          "Node.js" for a resume that literally said "NodeJS" which the regex missed
+          (detected via 5-char prefix overlap between the two forms).
+      (c) The stripped skill name (alphanumeric only) appears in the raw resume text
+          sections (skills section + projects section) that were passed in.
+
+    Skills that don't meet any criterion are silently dropped.  This prevents Gemini
+    from inventing technologies (React, HTML, CSS…) for Python-only resumes.
+    """
     if not isinstance(raw, list) or not raw:
         return original
+
+    original_lower = {s.lower() for s in original}
+    # Normalise raw text once for fast substring checks
+    raw_plain = re.sub(r"[^a-z0-9]", "", raw_text.lower()) if raw_text else ""
+
     result: list[str] = []
     for item in raw:
-        if isinstance(item, str):
-            s = item.strip()
-            if s and len(s) <= 40:
+        if not isinstance(item, str):
+            continue
+        s = item.strip()
+        if not s or len(s) > 40:
+            continue
+        s_lower = s.lower()
+
+        # (a) Already in original extraction
+        if s_lower in original_lower:
+            result.append(s)
+            continue
+
+        # (b) Canonical normalization: 5-char prefix overlap with an existing skill
+        # e.g. "postgresql" ↔ "postgres", "node.js" ↔ "nodejs", "react.js" ↔ "react"
+        if any(
+            len(s_lower) >= 4 and len(o) >= 4
+            and (s_lower[:5] in o or o[:5] in s_lower)
+            for o in original_lower
+        ):
+            result.append(s)
+            continue
+
+        # (c) Appears literally in raw skills/projects text (handles abbreviation variants
+        # the rule-based regex missed, e.g. "NodeJS" in text → Gemini returns "Node.js")
+        if raw_plain:
+            s_plain = re.sub(r"[^a-z0-9]", "", s_lower)
+            if len(s_plain) >= 4 and s_plain in raw_plain:
                 result.append(s)
+                continue
+
+        # No evidence found → likely hallucinated; drop
+        logger.debug("Rejected LLM-added skill not evidenced in resume: %s", s)
+
     return result if result else original
 
 
@@ -479,7 +546,16 @@ def _build_role_enrichment_prompt(analysis: dict, roles: list[dict]) -> str:
         "3. Return ONLY valid JSON — no markdown fences, no prose.\n"
         "4. Keep all string values under 150 characters.\n"
         "5. Each array: 2–4 items.\n"
-        "6. Only enrich roles listed in RECOMMENDED ROLES — do NOT invent new roles.\n\n"
+        "6. Only enrich roles listed in RECOMMENDED ROLES — do NOT invent new roles.\n"
+        "7. Do NOT infer frontend/HTML/CSS/JavaScript/React experience from Python data tools "
+        "such as Streamlit, Dash, Gradio, or Bokeh — these are data-visualisation tools, "
+        "not frontend frameworks.\n"
+        "8. Do NOT add any technology to 'resume_evidence' unless it appears verbatim in "
+        "the candidate's skills list above.\n"
+        "9. When skill evidence is thin or indirect, set role_type to 'stretch' rather than "
+        "'realistic', and clearly note the gap in 'gaps'.\n"
+        "10. Reason strictly from the provided skills list and evidence. Do not assume "
+        "technologies from job-title conventions or popular combinations.\n\n"
         f"CANDIDATE PROFILE:\n"
         f"Experience level: {experience_level}\n"
         f"Skills: {skills_str}\n"

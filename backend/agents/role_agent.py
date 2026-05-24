@@ -46,10 +46,15 @@ _ROLES = [
                   "redux", "webpack", "vite", "jest", "graphql", "figma",
                   "nuxt.js", "gatsby", "sass"],
         "project_signals": [
-            "ui", "interface", "component", "responsive", "web app",
-            "dashboard", "landing page", "frontend", "user experience",
-            "accessibility", "animation", "spa", "design system", "layout",
-            "pixel", "figma", "tailwind", "react", "css", "styled",
+            # Signals that are uniquely indicative of frontend web development.
+            # Generic terms removed: "dashboard" (matches Streamlit/analytics),
+            # "ui"/"interface"/"component" (generic software), "web app"/"layout",
+            # "user experience" (UX research), "pixel" (ambiguous).
+            "frontend", "responsive", "landing page",
+            "accessibility", "animation", "spa", "design system",
+            "figma", "tailwind css", "react", "jsx", "tsx",
+            "webpack", "vite", "browser", "dom", "viewport",
+            "next.js", "nuxt", "gatsby", "styled components",
         ],
         "next_skills": [
             "Server-side rendering (Next.js / Nuxt)",

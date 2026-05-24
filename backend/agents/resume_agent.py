@@ -326,10 +326,11 @@ _TECH_DOMAIN_MAP: dict[str, str] = {
     "kubernetes": "Cloud / DevOps", "terraform": "Cloud / DevOps",
     "jenkins": "Cloud / DevOps", "ci/cd": "Cloud / DevOps",
     "ansible": "Cloud / DevOps", "github actions": "Cloud / DevOps",
-    # Frontend
+    # Frontend — only actual frontend frameworks/libraries count as domain signals.
+    # JavaScript and TypeScript are deliberately excluded: they are cross-domain
+    # (Node.js backend, data scripts, etc.) and must not inflate the frontend score.
     "react": "Web Frontend", "angular": "Web Frontend", "vue": "Web Frontend",
     "next.js": "Web Frontend", "svelte": "Web Frontend",
-    "javascript": "Web Frontend", "typescript": "Web Frontend",
     # Backend
     "django": "Web Backend", "flask": "Web Backend", "fastapi": "Web Backend",
     "node.js": "Web Backend", "spring": "Web Backend", "express": "Web Backend",
@@ -970,6 +971,15 @@ def _extract_experience_level(text: str, work_exp: list = None) -> str:
 
 # ── Domain inference (enhanced: certifications + project techs) ───────────────
 
+
+# Recognized frontend frameworks/libraries — presence of at least one is required
+# before any frontend domain signal is credited.  Plain JS/TS are excluded because
+# they are used in backend (Node), data-science, and scripting contexts.
+_FE_FRAMEWORKS = frozenset({
+    "react", "angular", "vue.js", "vue", "next.js", "nuxt.js", "gatsby", "svelte",
+})
+
+
 def _infer_domains(
     skills:         list[str],
     certifications: list = None,
@@ -977,7 +987,15 @@ def _infer_domains(
 ) -> list[str]:
     s = {sk.lower() for sk in skills}
 
-    fe  = len(s & {"javascript", "react", "angular", "vue.js", "vue", "html", "css", "typescript", "next.js"})
+    # Frontend: require at least one explicit frontend framework.
+    # HTML/CSS/JS/TS are cross-domain and do NOT count on their own.
+    fe_fw = len(s & _FE_FRAMEWORKS)
+    if fe_fw > 0:
+        fe_generic = len(s & {"javascript", "typescript", "html", "css", "tailwind css", "tailwind"})
+        fe: float = fe_fw * 2 + fe_generic
+    else:
+        fe = 0.0   # no framework present → no frontend domain signal
+
     be  = len(s & {"python", "java", "node.js", "django", "fastapi", "flask", "spring", "express.js", "express", "c#", "go", "rust"})
     ml  = len(s & {"tensorflow", "pytorch", "keras", "deep learning", "machine learning", "nlp", "computer vision"})
     ds  = len(s & {"pandas", "numpy", "scikit-learn", "r", "tableau", "statistics", "machine learning"})
@@ -1003,7 +1021,10 @@ def _infer_domains(
                     elif "mobile" in dl:                     mob += 1
                     break  # one domain per cert
 
-    # Boost from project technologies (fractional, so one project doesn't dominate)
+    # Boost from project technologies (fractional, so one project doesn't dominate).
+    # Frontend boost from projects is conditional: only credited when the candidate's
+    # extracted skills already contain at least one frontend framework.  This prevents
+    # a Streamlit/Dash project from artificially inflating the frontend score.
     if projects:
         for proj in projects:
             for tech in proj.technologies:
@@ -1012,7 +1033,10 @@ def _infer_domains(
                 if "cloud" in dl or "devops" in dl:     do  += 0.5
                 elif "machine learning" in dl:           ml  += 0.5
                 elif "data engineering" in dl:           de  += 0.5
-                elif "frontend" in dl:                   fe  += 0.5
+                elif "frontend" in dl:
+                    if fe_fw >= 1:                       fe  += 0.5
+                    # else: project uses a frontend tech but candidate lacks a framework
+                    #       → do not credit frontend domain
                 elif "backend" in dl:                    be  += 0.5
 
     domains: list[str] = []
