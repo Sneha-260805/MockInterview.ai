@@ -14,6 +14,10 @@ class Question(BaseModel):
     expected_concepts: Optional[List[str]] = None
     follow_up_intent: Optional[str] = None
     generation_mode: Optional[str] = None
+    # Agent-driven generation metadata (optional — backward compatible)
+    question_type: Optional[str] = None       # technical | behavioral | follow_up | fundamentals | synthesis
+    why_selected: Optional[str] = None          # agent explanation for this question choice
+    followup_of_previous: Optional[bool] = None # True when probing the prior answer/topic
 
 
 class EvaluationResult(BaseModel):
@@ -65,6 +69,9 @@ class ImprovedEvaluationResult(EvaluationResult):
     improvement_delta: Dict[str, int] = {}     # {"technical": +21, "depth": +18, "correctness": +8}
     newly_covered: List[str] = []              # concepts covered now that were missing before
     still_missing: List[str] = []              # concepts still missing after retry
+    # Phase 11: State update fields (optional — backward compatible)
+    state_updated: bool = False                # whether candidate_state was successfully updated
+    updated_candidate_state: Optional[Any] = None  # updated CandidateState serialised
 
 
 class InterviewSession(BaseModel):

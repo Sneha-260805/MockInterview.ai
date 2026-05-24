@@ -814,6 +814,10 @@ def _build_diagnostic(
                 adaptation_summary.append(
                     f"Confidence recovery triggered after '{prev}' — easier entry point on '{next_t}'"
                 )
+            else:
+                obs = trace.get("observation", "")
+                if obs:
+                    adaptation_summary.append(obs[:180])
     elif adaptation_log:
         adaptation_summary = [f"Q{i+2}: {r}" for i, r in enumerate(adaptation_log[:4])]
 

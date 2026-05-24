@@ -10,7 +10,7 @@ Pydantic models representing the intelligence layer:
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 
 class SkillSignal(BaseModel):
@@ -50,17 +50,28 @@ class CandidateState(BaseModel):
 class AgentDecisionTrace(BaseModel):
     decision_type: str       # increase_difficulty | deeper_follow_up |
                              # strengthen_fundamentals | confidence_recovery |
-                             # remediation | final_synthesis
+                             # remediation | final_synthesis | switch_topic |
+                             # verify_resume_claim | behavioral_probe
     previous_topic: str
     previous_score: int
     detected_issue: str      # plain-English summary of what triggered this decision
     next_topic: str
     next_difficulty: str
     reason_for_adaptation: str          # human-readable explanation shown in UI
-    evidence: List[str]                 # bullet-point evidence for the decision
-    signal_scores: Dict[str, int] = {}
+    evidence: List[str] = Field(default_factory=list)
+    # Judge-ready / frontend fields (optional — backward compatible)
+    observation: str = ""               # what the agent observed about the last answer
+    signal_scores: Dict[str, Any] = Field(default_factory=dict)  # values may be null when unavailable
     difficulty_rationale: str = ""
     topic_rationale: str = ""
+    next_question_strategy: str = ""    # e.g. same_topic_depth_probe, advance_uncovered_topic
+    generation_mode: str = ""           # followup_generator | question_generator | fallback | pending
+    generated_question_reason: str = "" # why this exact question was selected/generated
+    followup_of_previous: Optional[bool] = None
+    confidence_available: bool = False
+    communication_available: bool = False
+    engagement_available: bool = False
+    confidence_note: str = ""           # explains unavailable or proxy signals
 
 
 class InterviewPlanResponse(BaseModel):

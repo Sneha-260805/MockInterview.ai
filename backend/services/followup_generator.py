@@ -397,7 +397,72 @@ _CONCEPT_FOLLOWUPS: List[Tuple[str, str, List[str]]] = [
 ]
 
 
-# ── Resume-tech fallback ───────────────────────────────────────────────────────
+# ── Vague-claim follow-ups (light answers that need probing) ─────────────────
+
+_VAGUE_CLAIM_FOLLOWUPS: List[Tuple[str, str, List[str]]] = [
+    (
+        r"\b(?:worked on|implemented|handled|built|used|did)\s+(?:auth(?:entication)?|login|sign[\s-]?in)\b|\bauthentication\b",
+        "What authentication method did you use, and how did you protect routes or APIs from unauthorized access?",
+        [
+            "JWT/session/OAuth choice and trade-offs",
+            "Authorization vs authentication separation",
+            "Route or API protection strategy",
+            "Token validation and security hardening",
+        ],
+    ),
+    (
+        r"\bbuilt (?:the )?backend\b|\bbackend apis?\b|\bbuilt apis?\b|\bdesigned apis?\b",
+        "Can you walk me through one API you designed, including request validation, error handling, and database interaction?",
+        [
+            "API design and resource modelling",
+            "Request validation approach",
+            "Consistent error handling",
+            "Database interaction and query patterns",
+        ],
+    ),
+    (
+        r"\b(?:built|developed|worked on|shipped)\s+(?:a |an |the )?(?:project|app|application|platform|system)\b",
+        "Can you walk me through the architecture of that project — what were the main components, and what was the hardest technical decision you made?",
+        [
+            "System architecture and component boundaries",
+            "Key technology choices with rationale",
+            "Hardest technical decision or trade-off",
+            "Personal contribution vs team responsibilities",
+        ],
+    ),
+]
+
+
+def _normalize_topic_label(topic: str) -> str:
+    if topic.startswith("Follow-Up:"):
+        return topic.split(":", 1)[1].strip()
+    return topic.strip()
+
+
+def _missing_concept_followup(
+    missing_concepts: List[str],
+    current_topic: str,
+    answer: str,
+) -> Optional[FollowupResult]:
+    """Build a gap-targeted follow-up when rubric concepts were missed."""
+    if not missing_concepts:
+        return None
+    concept = missing_concepts[0]
+    topic_label = _normalize_topic_label(current_topic) or "this topic"
+    question = (
+        f"On {topic_label}, your answer didn't fully address '{concept}'. "
+        f"Can you explain how you would handle {concept} in a real production scenario?"
+    )
+    reason = (
+        f"Prior answer on '{topic_label}' missed '{concept}' — "
+        "staying on topic to close the implementation gap."
+    )
+    points = missing_concepts[:4] + [
+        "Concrete production example",
+        "Trade-offs considered",
+    ]
+    return question, reason, points[:5]
+
 
 def _resume_tech_followup(tech: str) -> FollowupResult:
     return (
@@ -433,16 +498,28 @@ def generate_followup(
     answer: str,
     current_topic: str = "",
     resume_techs: Optional[List[str]] = None,
+    *,
+    missing_concepts: Optional[List[str]] = None,
+    covered_concepts: Optional[List[str]] = None,
+    previous_question: str = "",
+    selected_role: str = "",
+    decision_type: str = "",
+    decision_reason: str = "",
 ) -> Optional[FollowupResult]:
     """
     Scan the candidate's answer for specific technologies or concepts.
     Return a targeted (question, reason, expected_points) tuple, or None.
 
     Priority:
-      1. Specific tech pattern  (Redux Toolkit, Airflow, etc.)
-      2. Concept pattern        (N+1, cache stampede, etc.)
-      3. Resume-tech mention    (generic "you mentioned X from your resume")
+      1. Specific tech pattern  (Redux Toolkit, Airflow, Redis, etc.)
+      2. Vague claim pattern    (authentication, backend APIs, project ownership)
+      3. Concept pattern        (N+1, cache stampede, etc.)
+      4. Resume-tech mention    (generic "you mentioned X from your resume")
+      5. Missing rubric concept (when decision context requests gap closure)
     """
+    if not answer or not answer.strip():
+        return None
+
     al = answer.lower()
 
     for pattern, question, points in _TECH_FOLLOWUPS:
@@ -453,6 +530,23 @@ def generate_followup(
                 f"You specifically mentioned {matched_term} in your answer. "
                 "Probing deeper into that implementation and the design decisions behind it."
             )
+            if decision_reason:
+                reason = f"{reason} Agent decision: {decision_reason[:120]}"
+            return question, reason, points
+
+    for pattern, question, points in _VAGUE_CLAIM_FOLLOWUPS:
+        if re.search(pattern, al):
+            reason = (
+                "Your answer referenced this area at a high level. "
+                "Probing for concrete implementation and ownership detail."
+            )
+            if decision_type == "verify_resume_claim":
+                reason = (
+                    "Follow-up generated from candidate claim — verifying resume/project "
+                    "ownership with a specifics-focused question."
+                )
+            elif decision_reason:
+                reason = f"{reason} {decision_reason[:120]}"
             return question, reason, points
 
     for pattern, question, points in _CONCEPT_FOLLOWUPS:
@@ -467,5 +561,17 @@ def generate_followup(
         mentioned = _find_resume_mentions(answer, resume_techs)
         if mentioned:
             return _resume_tech_followup(mentioned[0])
+
+    if missing_concepts and decision_type in (
+        "deeper_follow_up",
+        "ask_deeper_followup",
+        "verify_resume_claim",
+        "claim_verification",
+        "strengthen_fundamentals",
+        "remediation",
+    ):
+        gap_followup = _missing_concept_followup(missing_concepts, current_topic, answer)
+        if gap_followup:
+            return gap_followup
 
     return None

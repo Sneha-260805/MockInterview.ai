@@ -12,7 +12,8 @@ from models.interview import (
 from models.analysis import ResumeAnalysis
 from agents import interview_orchestrator, evaluator_agent, feedback_agent
 from agents import intelligence_engine
-from services import question_generator, multimodal_aggregator
+from services import question_generator, multimodal_aggregator, followup_primary
+from services.trace_enrichment import build_fallback_trace
 from database import store
 from database.connection import get_db, is_using_memory
 
@@ -307,21 +308,67 @@ async def improve_answer(body: ImproveAnswerRequest):
         answers.append(answer_dict)
 
     session_data["answers"] = answers
+
+    # ── Phase 11: Update candidate_state with improved answer ───────────────────
+    # Use update_candidate_state_for_improvement() rather than update_candidate_state()
+    # to prevent double-counting: answers_answered must not increment (same unique
+    # question), domain_performance must replace not append (avoid false persistent_weak
+    # detection), and concept_gaps must reduce for newly-covered concepts.
+    raw_state = session_data.get("candidate_state")
+    if raw_state:
+        try:
+            from models.agent_state import CandidateState
+            cs = CandidateState(**raw_state)
+
+            # Reuse the same question number for audio/video — it's a retry, not a new Q
+            q_number = len([a for a in answers if a.get("question_id") != body.question_id]) + 1
+            audio_score = multimodal_aggregator.latest_for_question(
+                session_data.get("audio_scores", []), q_number
+            )
+            video_score = multimodal_aggregator.latest_for_question(
+                session_data.get("video_scores", []), q_number
+            )
+
+            cs = intelligence_engine.update_candidate_state_for_improvement(
+                candidate_state=cs,
+                answer_record=answer_dict,
+                previous_evaluation=body.previous_evaluation,
+                audio_score=audio_score,
+                video_score=video_score,
+            )
+            session_data["candidate_state"] = cs.model_dump()
+        except Exception:
+            pass  # non-fatal: state update failed, but we still return the improved evaluation
+
     store.save_session(body.session_id, session_data)
 
     if not is_using_memory():
         db = get_db()
         # Replace or push: use arrayFilters for the update
+        # Also update candidate_state to reflect improved answer
+        update_payload = {"$set": {"candidate_state": session_data.get("candidate_state")}}
         try:
             await db["interview_sessions"].update_one(
                 {"session_id": body.session_id, "answers.question_id": body.question_id},
-                {"$set": {"answers.$": answer_dict}},
+                {
+                    "$set": {
+                        "answers.$": answer_dict,
+                        "candidate_state": session_data.get("candidate_state"),
+                    }
+                },
             )
         except Exception:
             await db["interview_sessions"].update_one(
                 {"session_id": body.session_id},
-                {"$push": {"answers": answer_dict}},
+                {
+                    "$push": {"answers": answer_dict},
+                    "$set": {"candidate_state": session_data.get("candidate_state")},
+                },
             )
+
+    # Include updated state in response for frontend awareness
+    updated_state = session_data.get("candidate_state")
+    state_updated = bool(updated_state)
 
     return ImprovedEvaluationResult(
         **new_result.model_dump(),
@@ -330,6 +377,8 @@ async def improve_answer(body: ImproveAnswerRequest):
         improvement_delta=improvement_delta,
         newly_covered=newly_covered,
         still_missing=still_missing,
+        state_updated=state_updated,
+        updated_candidate_state=updated_state,
     )
 
 
@@ -425,13 +474,17 @@ async def next_question(body: NextQuestionRequest):
 
             reason = trace.reason_for_adaptation
             analysis = await _load_analysis(session_data.get("candidate_id", ""))
-            next_q = await question_generator.generate_question(
+            last_eval = last_answer.get("evaluation", {})
+            next_q, decision_trace = await followup_primary.resolve_primary_next_question(
+                trace,
                 role=session_data.get("selected_role", ""),
-                topic=trace.next_topic or body.current_topic,
-                difficulty=trace.next_difficulty or "medium",
                 analysis=analysis,
-                previous_answer=last_answer.get("answer_text", ""),
-                previous_missing=last_answer.get("evaluation", {}).get("missing_points", []),
+                last_answer_text=last_answer.get("answer_text", ""),
+                last_eval=last_eval,
+                current_q_dict=current_q_dict,
+                body_current_topic=body.current_topic,
+                turn_multi=turn_multi,
+                resume_techs=session_data.get("resume_techs", []),
             )
             last_answer["multimodal"] = turn_multi
 
@@ -448,6 +501,22 @@ async def next_question(body: NextQuestionRequest):
         next_q = next_q_result
         if not reason:
             reason = orchestrator_reason
+        if decision_trace is None:
+            prev_topic = body.current_topic
+            prev_score = body.last_answer_score
+            decision_trace = build_fallback_trace(
+                previous_topic=prev_topic,
+                previous_score=prev_score,
+                next_topic=next_q.topic,
+                next_difficulty=next_q.difficulty,
+                reason=orchestrator_reason,
+            )
+            next_q = next_q.model_copy(
+                update={
+                    "generation_mode": next_q.generation_mode or "fallback",
+                    "why_selected": orchestrator_reason,
+                }
+            )
     else:
         session_complete = n_answered >= interview_orchestrator.MAX_QUESTIONS
 
