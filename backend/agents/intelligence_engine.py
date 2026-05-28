@@ -920,7 +920,7 @@ def build_interview_plan(
         ]
     else:
         _personalized_topics = _resume_aware_curriculum(selected_role, resume_analysis)
-    diff_sequence = ["easy", "medium", "medium", "hard", "hard"]
+    diff_sequence = ["easy", "easy", "medium", "medium", "hard"]
     for topic in _personalized_topics:
         if len(plan_topics) >= 5:
             break
@@ -1117,14 +1117,17 @@ def initialize_candidate_state(
 # Controls how much a single answer shifts the Bayesian mastery estimate.
 # behavioral / behavioral_probe: 0.00 — never update technical mastery.
 _OBS_WEIGHT_BY_QTYPE: dict[str, float] = {
-    "technical_concept":   0.45,
-    "technical_follow_up": 0.40,
-    "claim_verification":  0.30,
-    "verify_resume_claim": 0.30,
-    "project_deep_dive":   0.35,
-    "final_synthesis":     0.45,
-    "follow_up":           0.40,
-    "behavioral":          0.00,
+    # Higher weights make mastery converge faster toward observed evidence.
+    # technical_concept is the primary signal — a great answer should visibly
+    # move mastery (prior=50 + score=95 → ~74; two such answers → ~83).
+    "technical_concept":   0.55,  # was 0.45 — more responsive to strong/weak answers
+    "technical_follow_up": 0.50,  # was 0.40 — follow-up answers carry real depth signal
+    "claim_verification":  0.35,  # was 0.30 — ownership checks are partial signal
+    "verify_resume_claim": 0.35,  # was 0.30
+    "project_deep_dive":   0.40,  # was 0.35 — project answers have high relevance
+    "final_synthesis":     0.55,  # was 0.45 — synthesis answers are high-confidence
+    "follow_up":           0.50,  # was 0.40
+    "behavioral":          0.00,  # behavioral answers carry zero technical mastery signal
     "behavioral_probe":    0.00,
 }
 
@@ -1169,7 +1172,7 @@ def update_candidate_state(
         obs_weight = _OBS_WEIGHT_BY_QTYPE[question_type]
     else:
         # Legacy default: trust observed evidence more as interview progresses
-        obs_weight = 0.45 if state.answers_answered >= 3 else 0.40
+        obs_weight = 0.55 if state.answers_answered >= 3 else 0.50
     prior_weight = 1.0 - obs_weight
     is_behavioral = obs_weight == 0.0
 
@@ -1362,7 +1365,7 @@ def update_candidate_state_for_improvement(
     if question_type and question_type in _OBS_WEIGHT_BY_QTYPE:
         obs_weight = _OBS_WEIGHT_BY_QTYPE[question_type]
     else:
-        obs_weight = 0.45 if state.answers_answered >= 3 else 0.40
+        obs_weight = 0.55 if state.answers_answered >= 3 else 0.50
     prior_weight = 1.0 - obs_weight
     is_behavioral = obs_weight == 0.0
 
@@ -1818,20 +1821,28 @@ def _should_do_behavioral_probe(
         return False
 
     # Trigger 1: communication concern (fires at n >= 2)
-    if candidate_state.communication_trend in ("poor", "fair"):
+    # Only fire early (Q3) when there is a genuine communication signal — poor
+    # vocal clarity or explicit communication trend.  This should not fire just
+    # because the candidate is nervous or the audio wasn't captured.
+    if candidate_state.communication_trend == "poor":
         return True
 
-    # Trigger 2: confidence declining (fires at n >= 2; works without audio)
-    if candidate_state.confidence_trend == "declining":
+    # Trigger 2: confidence declining AND at least 3 questions answered
+    # Don't pivot to behavioral at Q3 purely due to declining confidence — that
+    # can be a single bad answer.  Require 3 answered questions for stability.
+    if candidate_state.confidence_trend == "declining" and n >= 3:
         return True
 
     # Trigger 3: strong technical performance → soft-skill validation needed
-    if tech_score >= 75:
+    # Require n >= 3 so we don't redirect a good Q2 answer to behavioral at Q3.
+    # A 5-question interview should have ≥ 2 technical questions before pivoting.
+    if tech_score >= 75 and n >= 3:
         return True
 
-    # Trigger 4: adequate technical coverage — by Q4 (n >= 3) enough signal
+    # Trigger 4: adequate technical coverage — by Q5 (n >= 4) enough signal
     # exists to justify pivoting to assess communication, ownership, reflection.
-    if n >= 3 and candidate_state.selected_role:
+    # Changed from n >= 3 to n >= 4 so Q4 stays technical and Q5 can be behavioral.
+    if n >= 4 and candidate_state.selected_role:
         return True
 
     # Trigger 5: late-interview urgency — n >= 4 means we're near the end

@@ -62,8 +62,8 @@ def _make_answer_record(topic: str, tech_score: int, covered: list = None, missi
 def test_strong_concept_answer_raises_topic_mastery():
     """
     A high-scoring technical_concept answer (tech=90) should raise a topic
-    that started at 55.  obs_weight for technical_concept is 0.45, so
-    updated = round(55 * 0.55 + 90 * 0.45) = round(30.25 + 40.5) = 71.
+    that started at 55.  obs_weight for technical_concept is 0.55, so
+    updated = round(55 * 0.45 + 90 * 0.55) = round(24.75 + 49.5) = 74.
     """
     state = _make_state({"Vector Search": 55})
     record = _make_answer_record("Vector Search", tech_score=90)
@@ -76,7 +76,7 @@ def test_strong_concept_answer_raises_topic_mastery():
         f"Expected mastery > 55 after strong concept answer, "
         f"got {updated.skill_mastery['Vector Search']}"
     )
-    assert updated.skill_mastery["Vector Search"] == 71
+    assert updated.skill_mastery["Vector Search"] == 74
 
 
 # ── Test 2: concept answer without project mention still raises mastery ────────
@@ -105,8 +105,8 @@ def test_concept_answer_without_project_mention_raises_mastery():
 
 def test_technical_followup_raises_related_topic_mastery():
     """
-    A technical_follow_up answer uses obs_weight 0.40.
-    Starting at 60: round(60 * 0.60 + 85 * 0.40) = round(36 + 34) = 70.
+    A technical_follow_up answer uses obs_weight 0.50.
+    Starting at 60: round(60 * 0.50 + 85 * 0.50) = round(30 + 42.5) = 72.
     """
     state = _make_state({"Authentication": 60})
     record = _make_answer_record("Authentication", tech_score=85)
@@ -115,7 +115,7 @@ def test_technical_followup_raises_related_topic_mastery():
         state, record, question_type="technical_follow_up"
     )
 
-    expected = round(60 * 0.60 + 85 * 0.40)   # 70
+    expected = round(60 * 0.50 + 85 * 0.50)   # 72
     assert updated.skill_mastery["Authentication"] == expected, (
         f"Expected {expected}, got {updated.skill_mastery['Authentication']}"
     )
@@ -165,7 +165,7 @@ def test_behavioral_answer_skips_adjacent_topic_propagation():
 
 def test_project_deep_dive_updates_project_topic_not_unrelated_topics():
     """
-    A project_deep_dive answer should update the answered topic (obs_weight=0.35)
+    A project_deep_dive answer should update the answered topic (obs_weight=0.40)
     but must NOT touch unrelated topics that are not in _ADJACENT_TOPICS.
     """
     state = _make_state(
@@ -177,8 +177,8 @@ def test_project_deep_dive_updates_project_topic_not_unrelated_topics():
         state, record, question_type="project_deep_dive"
     )
 
-    # Database Design should be updated (obs_weight=0.35)
-    expected_db = round(50 * 0.65 + 85 * 0.35)   # round(32.5 + 29.75) = 62
+    # Database Design should be updated (obs_weight=0.40)
+    expected_db = round(50 * 0.60 + 85 * 0.40)   # round(30 + 34) = 64
     assert updated.skill_mastery["Database Design"] == expected_db, (
         f"Expected {expected_db}, got {updated.skill_mastery['Database Design']}"
     )
@@ -190,9 +190,9 @@ def test_project_deep_dive_updates_project_topic_not_unrelated_topics():
 
 def test_claim_verification_updates_related_topic_moderately():
     """
-    claim_verification obs_weight is 0.30 — lighter than technical_concept (0.45).
+    claim_verification obs_weight is 0.35 — lighter than technical_concept (0.55).
     A strong answer on "Authentication" starting at 55:
-    round(55 * 0.70 + 88 * 0.30) = round(38.5 + 26.4) = 65.
+    round(55 * 0.65 + 88 * 0.35) = round(35.75 + 30.8) = 67.
     """
     state = _make_state({"Authentication": 55})
     record = _make_answer_record("Authentication", tech_score=88)
@@ -201,7 +201,7 @@ def test_claim_verification_updates_related_topic_moderately():
         state, record, question_type="claim_verification"
     )
 
-    expected = round(55 * 0.70 + 88 * 0.30)   # 65
+    expected = round(55 * 0.65 + 88 * 0.35)   # 67
     assert updated.skill_mastery["Authentication"] == expected, (
         f"Expected {expected}, got {updated.skill_mastery['Authentication']}"
     )

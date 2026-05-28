@@ -643,9 +643,10 @@ class TestBehavioralProbeDecision:
     def test_behavioral_trace_has_required_fields(self):
         """
         Behavioral trace must populate all judge-ready fields.
-        Signal: communication_trend='fair' at n=2 is sufficient to trigger behavioral_probe.
+        Signal: communication_trend='poor' at n=2 fires (still triggers at n >= 2).
+        (communication_trend='fair' no longer triggers at n=2 — requires n >= 3.)
         """
-        state = self._state_with_n_answered(2, communication_trend="fair")
+        state = self._state_with_n_answered(2, communication_trend="poor")
         result = make_next_question_decision(
             state,
             {"technical_score": 68, "depth_score": 62, "missing_points": [], "covered_points": ["REST"]},
@@ -654,7 +655,7 @@ class TestBehavioralProbeDecision:
             self._history_2_technical(),
         )
         assert result.decision_type == "behavioral_probe", (
-            f"Expected behavioral_probe with comm='fair' signal, got {result.decision_type}"
+            f"Expected behavioral_probe with comm='poor' signal, got {result.decision_type}"
         )
         assert result.topic_rationale
         assert result.difficulty_rationale
@@ -688,17 +689,24 @@ class TestBehavioralProbeDecision:
 
     def test_behavioral_probe_triggered_by_declining_confidence(self):
         """
-        answers_answered == 2 + confidence_trend='declining' is a sufficient signal
-        to trigger behavioral_probe, even with good communication and moderate tech score.
+        answers_answered == 3 + confidence_trend='declining' is a sufficient signal
+        to trigger behavioral_probe.
+        Changed from n=2 to n=3: a single weak answer should not immediately pivot
+        to behavioral — require 3 technical questions for a stable confidence signal.
         """
-        state = self._state_with_n_answered(2, communication_trend="good", confidence_trend="declining")
+        state = self._state_with_n_answered(3, communication_trend="good", confidence_trend="declining")
+        history_3 = [
+            {"question": {"topic": "Project Deep Dive", "difficulty": "easy", "question_type": "technical"}},
+            {"question": {"topic": "API Design", "difficulty": "medium", "question_type": "technical"}},
+            {"question": {"topic": "Database", "difficulty": "medium", "question_type": "technical"}},
+        ]
         result = make_next_question_decision(
             state,
             {"technical_score": 60, "depth_score": 55, "missing_points": [], "covered_points": ["REST"]},
-            {"topic": "API Design", "difficulty": "medium"},
+            {"topic": "Database", "difficulty": "medium"},
             self._plan(),
-            self._history_2_technical(),
+            history_3,
         )
         assert result.decision_type == "behavioral_probe", (
-            f"Expected behavioral_probe with declining confidence signal, got {result.decision_type}"
+            f"Expected behavioral_probe with declining confidence at n=3, got {result.decision_type}"
         )

@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 /**
  * Phase 11 — InterviewPlanTimeline
  * Shows the agent's personalised interview plan as a vertical timeline.
@@ -17,6 +19,8 @@ const DIFF_DOT = {
 };
 
 export default function InterviewPlanTimeline({ plan = [], currentStep = 1, agentSummary = "" }) {
+  const [isOpen, setIsOpen] = useState(false);
+
   if (!plan || plan.length === 0) return null;
 
   return (
@@ -30,16 +34,33 @@ export default function InterviewPlanTimeline({ plan = [], currentStep = 1, agen
             />
           </svg>
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-indigo-800">Personalised Interview Plan</p>
           {agentSummary && (
             <p className="text-xs text-indigo-600 mt-0.5 leading-relaxed">{agentSummary}</p>
           )}
         </div>
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-50 transition-colors"
+          aria-expanded={isOpen}
+        >
+          {isOpen ? "Hide" : "Show"}
+          <svg
+            className={`w-3.5 h-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </button>
       </div>
 
       {/* Timeline */}
-      <div className="p-5">
+      {isOpen && <div className="p-5">
         <div className="relative">
           {/* Vertical line */}
           <div className="absolute left-3.5 top-4 bottom-4 w-px bg-gray-200" />
@@ -109,7 +130,7 @@ export default function InterviewPlanTimeline({ plan = [], currentStep = 1, agen
             })}
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

@@ -547,17 +547,23 @@ class TestBehavioralProbeIsSignalDriven:
         assert trace.next_question_strategy == "behavioral_communication_probe"
 
     def test_scenario_b_behavioral_probe_fires_with_declining_confidence(self):
-        """n=2, confidence_trend='declining' → behavioral_probe must trigger."""
-        state = _base_state(n=2, communication_trend="good", confidence_trend="declining")
+        """
+        n=3, confidence_trend='declining' → behavioral_probe must trigger.
+        Requires n >= 3 so a single weak answer doesn't immediately pivot to behavioral.
+        """
+        state = _base_state(n=3, communication_trend="good", confidence_trend="declining")
+        three_q_history = self._two_technical_history() + [
+            {"question": {"topic": "Performance", "difficulty": "medium", "question_type": "technical_concept"}},
+        ]
         trace = make_next_question_decision(
             state,
             _eval(tech=58, depth=50, missing=[], covered=[]),
-            _question("API Design", "medium"),
+            _question("Performance", "medium"),
             _plan(),
-            self._two_technical_history(),
+            three_q_history,
         )
         assert trace.decision_type == "behavioral_probe", (
-            f"behavioral_probe must fire with confidence='declining'. Got {trace.decision_type}"
+            f"behavioral_probe must fire with confidence='declining' at n=3. Got {trace.decision_type}"
         )
 
     def test_behavioral_probe_not_repeated_in_same_session(self):
@@ -582,14 +588,21 @@ class TestBehavioralProbeIsSignalDriven:
         )
 
     def test_behavioral_trace_has_trigger_label_in_detected_issue(self):
-        """Trace detected_issue must name the trigger (not just say 'behavioral')."""
-        state = _base_state(n=2, communication_trend="fair", confidence_trend="stable")
+        """
+        Trace detected_issue must name the trigger (not just say 'behavioral').
+        Uses n=3, communication_trend='poor' which still triggers at n >= 2.
+        (n=2 + fair communication no longer triggers — requires n >= 3 now.)
+        """
+        state = _base_state(n=3, communication_trend="poor", confidence_trend="stable")
+        three_q_history = self._two_technical_history() + [
+            {"question": {"topic": "Performance", "difficulty": "medium", "question_type": "technical_concept"}},
+        ]
         trace = make_next_question_decision(
             state,
             _eval(tech=65, depth=60, missing=[], covered=["REST"]),
-            _question("API Design", "medium"),
+            _question("Performance", "medium"),
             _plan(),
-            self._two_technical_history(),
+            three_q_history,
         )
         assert trace.decision_type == "behavioral_probe"
         assert "trigger" in trace.detected_issue.lower(), (

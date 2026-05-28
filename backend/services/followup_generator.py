@@ -439,6 +439,44 @@ def _normalize_topic_label(topic: str) -> str:
     return topic.strip()
 
 
+def _remediation_followup(
+    missing_concepts: List[str],
+    current_topic: str,
+) -> Optional[FollowupResult]:
+    """
+    Build a deliberately simpler, foundational follow-up for remediation
+    and strengthen_fundamentals decisions.
+
+    This is intentionally easier than _missing_concept_followup — it asks
+    the candidate to define and give a basic example rather than handle a
+    production scenario.  Used when the agent detects the candidate's
+    understanding is weak and needs to probe fundamentals before advancing.
+
+    Example: if a candidate fumbles XGBoost vs Random Forest, BAD would be
+    asking about quantization/pruning — GOOD is "explain the main training
+    difference between Random Forest and XGBoost in your own words."
+    """
+    if not missing_concepts:
+        return None
+    concept = missing_concepts[0]
+    topic_label = _normalize_topic_label(current_topic) or "this topic"
+    question = (
+        f"Let's step back to basics on {topic_label}. "
+        f"In your own words, can you explain what '{concept}' means "
+        f"and give me a simple, concrete example of it?"
+    )
+    reason = (
+        f"Returning to fundamentals on '{concept}' to build conceptual "
+        "understanding before progressing to harder material."
+    )
+    points = [
+        f"Clear definition of {concept}",
+        "Simple concrete example or analogy",
+        "Basic use case or when you would apply it",
+    ] + [c for c in missing_concepts[1:3] if c != concept]
+    return question, reason, points[:5]
+
+
 def _missing_concept_followup(
     missing_concepts: List[str],
     current_topic: str,
@@ -522,6 +560,22 @@ def generate_followup(
 
     al = answer.lower()
 
+    # ── Remediation / strengthen_fundamentals: bypass deep-tech probes ────────
+    # When the agent decides the candidate needs foundational help, do NOT scan
+    # the answer for technology patterns — those templates ask harder follow-ups
+    # (e.g., JWT revocation strategy, Kafka lag monitoring).  Instead generate a
+    # deliberately simpler question that targets the missed concept.
+    #
+    # BAD:  candidate fumbles XGBoost → system sees "model" in answer → asks
+    #       about quantization or pruning (harder, different sub-topic).
+    # GOOD: step back, ask "explain the main training difference between Random
+    #       Forest and XGBoost in your own words."
+    if decision_type in ("remediation", "strengthen_fundamentals"):
+        if missing_concepts:
+            return _remediation_followup(missing_concepts, current_topic)
+        # No missing concepts — let question_generator handle it via the normal path
+        return None
+
     for pattern, question, points in _TECH_FOLLOWUPS:
         m = re.search(pattern, al)
         if m:
@@ -567,8 +621,6 @@ def generate_followup(
         "ask_deeper_followup",
         "verify_resume_claim",
         "claim_verification",
-        "strengthen_fundamentals",
-        "remediation",
     ):
         gap_followup = _missing_concept_followup(missing_concepts, current_topic, answer)
         if gap_followup:

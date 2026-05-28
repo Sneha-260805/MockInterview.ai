@@ -204,6 +204,11 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
             technical = min(technical, 7)
             correctness = min(correctness, 5)
             depth = min(depth, 5)
+        elif len(answer_words) >= 8:
+            # Any genuine non-trivial attempt (8+ words) earns a minimum credit.
+            # This prevents completely wrong but substantive answers from scoring
+            # near-zero — a human interviewer would give at least 15 for effort.
+            technical = max(technical, 15)
 
     except Exception as exc:
         logger.warning("Semantic scoring failed, falling back to keyword: %s", exc)
@@ -216,6 +221,8 @@ def _rule_evaluate(req: EvaluateAnswerRequest) -> EvaluationResult:
             technical = min(technical, 7)
             correctness = min(correctness, 5)
             depth = min(depth, 5)
+        elif len(answer_words) >= 8:
+            technical = max(technical, 15)
 
     feedback = sc.generate_feedback(covered, missing, technical, depth)
 
@@ -271,9 +278,32 @@ def _add_rubric_scores(result: EvaluationResult, req: EvaluateAnswerRequest) -> 
 
         blended_tech = max(5, min(100, blended_tech))
 
-        # Global floor: any substantive attempt (≥ 15 words) shouldn't score below 30.
-        if len(req.answer.split()) >= 15:
-            blended_tech = max(blended_tech, 30)
+        # ── Graduated scoring floors (interviewer realism) ───────────────────
+        # A human interviewer applies graduated credit based on how much a
+        # candidate demonstrates:
+        #
+        #   • No concepts covered, short (8-14 words) → 15  (completely wrong,
+        #     but they attempted something coherent)
+        #   • No concepts covered, substantive (≥15 words) → 20  (wrong but
+        #     tried to reason; not zero)
+        #   • Any concept covered (partial understanding) → 35  (they got some
+        #     of it; heavy penalisation for minor gaps is unfair)
+        #
+        # Previously a single flat floor of 30 applied to all ≥15-word answers
+        # regardless of coverage, which over-rewarded wrong verbose answers and
+        # under-rewarded partial-but-shorter ones.
+        word_count = len(req.answer.split())
+        n_covered = len(result.covered_points)
+
+        if n_covered >= 1:
+            # Partial understanding — at least one concept correctly addressed
+            blended_tech = max(blended_tech, 35)
+        elif word_count >= 15:
+            # Substantive attempt, no concept coverage (completely wrong but verbose)
+            blended_tech = max(blended_tech, 20)
+        elif word_count >= 8:
+            # Short but genuine attempt, no coverage
+            blended_tech = max(blended_tech, 15)
 
         # ── Phase 3: Competence floors for technical_concept ─────────────────
         # A candidate who clearly understands a concept should not be penalised

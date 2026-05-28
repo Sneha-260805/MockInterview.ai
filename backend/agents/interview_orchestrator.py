@@ -690,11 +690,25 @@ async def start_session(
 # ── Adaptive next question (Phase 5) ─────────────────────────────────────────
 
 def _next_difficulty(current: str, tech: int, confidence: int) -> str:
-    if confidence < 50:
-        return "easy"
+    """
+    Determine the next question difficulty from technical performance.
+
+    confidence here is the audio/vocal confidence score from the frontend —
+    it measures delivery quality, NOT technical competence.  A nervous candidate
+    who gives a great technical answer should NOT be held at easy difficulty.
+
+    Only tech score drives difficulty escalation.  Vocal confidence is used as
+    a mild safety valve only when the candidate is also struggling technically
+    (tech < 50 AND confidence < 40 → prefer easy over medium).
+    """
     if tech >= 80:
         return {"easy": "medium", "medium": "hard", "hard": "hard"}.get(current, "medium")
     if tech >= 50:
+        # Stay at current difficulty.  Only ease off if vocal confidence is
+        # extremely low AND tech is already borderline — avoids penalising
+        # introverted candidates who give technically solid but quiet answers.
+        if confidence < 40 and tech < 60:
+            return {"hard": "medium", "medium": "easy", "easy": "easy"}.get(current, "easy")
         return current
     return {"hard": "medium", "medium": "easy", "easy": "easy"}.get(current, "easy")
 
@@ -827,10 +841,13 @@ async def _generate_next_with_llm(
             logger.warning("LLM next-question: parsed JSON missing 'question' key. data=%s", data)
             return None
 
+        # Always use our computed target_diff — do not let the LLM override
+        # difficulty since its difficulty estimate is often inconsistent and
+        # can escalate to "hard" too quickly when we want "medium".
         return Question(
             question_id=_qid(),
             question=question_text,
-            difficulty=data.get("difficulty") or target_diff,
+            difficulty=target_diff,
             topic=data.get("topic") or req.current_topic,
             expected_points=data.get("expected_points") or [],
         )
@@ -869,9 +886,12 @@ async def next_question(
     last_answer_text = answers[-1]["answer_text"] if answers else ""
     resume_techs = session_data.get("resume_techs", [])
 
-    # ── Behavioral question injection at Q3 ───────────────────────────────────
-    # Always include one behavioral question mid-interview to assess soft skills.
-    if n_answered == 2 and "Behavioral & Communication" not in covered_topics:
+    # ── Behavioral question injection at Q4 ───────────────────────────────────
+    # Always include one behavioral question after 3 technical questions so the
+    # candidate has a proper warm-up before being asked about soft skills.
+    # Changed from n_answered == 2 (Q3) to n_answered == 3 (Q4) to allow
+    # at least 3 technical questions before the behavioral pivot.
+    if n_answered == 3 and "Behavioral & Communication" not in covered_topics:
         import random
         behavioral_q = random.choice(_BEHAVIORAL_BANK)
         asked_starts = {q["question"][:30] for q in questions_asked}
@@ -885,7 +905,7 @@ async def next_question(
             expected_points=behavioral_q["p"],
         )
         reason = (
-            "You're doing well on the technical questions. "
+            "You've covered the core technical areas well. "
             "Shifting briefly to a behavioral question to get a rounded picture of how you work."
         )
         return next_q, reason, False
